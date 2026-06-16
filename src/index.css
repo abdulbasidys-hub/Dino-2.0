@@ -100,25 +100,42 @@ input:focus {
 
 .topbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
   padding: 16px 0;
   border-bottom: 3px solid var(--color-fg, #535353);
-  flex-wrap: wrap;
+  transition: border-color 0.3s, background 0.3s;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--color-bg, #ffffff);
+}
+
+.topbar-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 10px;
-  transition: border-color 0.3s;
 }
 
 .topbar-logo {
   font-size: 14px;
   letter-spacing: 1px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .topbar-nav {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.topbar-username {
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .topbar-nav button,
@@ -235,6 +252,76 @@ input:focus {
   overflow-x: auto;
 }
 
+/* Compact round timer — shown in topbar on every page */
+
+.round-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid var(--color-fg, #535353);
+  padding: 5px 8px;
+  font-size: 8px;
+  white-space: nowrap;
+  transition: border-color 0.3s, background 0.3s, color 0.3s;
+}
+
+.round-bar-label {
+  opacity: 0.7;
+}
+
+.round-bar-time {
+  font-size: 10px;
+}
+
+.round-bar-urgent {
+  background: var(--color-fg, #535353);
+  color: var(--color-bg, #ffffff);
+  animation: round-bar-pulse 1s ease-in-out infinite;
+}
+
+@keyframes round-bar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Inline timer next to score on the Play page (below the game canvas) */
+
+.play-stats-row {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 10px 0;
+  font-size: 10px;
+  flex-wrap: wrap;
+}
+
+.play-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.play-stat .label {
+  opacity: 0.65;
+  font-size: 8px;
+}
+
+.play-stat .value {
+  font-size: 13px;
+}
+
+/* Round timer */
+
+.round-timer-panel {
+  text-align: center;
+}
+
+.round-timer-value {
+  font-size: 36px;
+  letter-spacing: 2px;
+  margin: 8px 0;
+}
+
 /* Full-bleed wrapper for the game — escapes the 600px app-shell */
 .game-fullbleed {
   position: relative;
@@ -294,6 +381,14 @@ input:focus {
 
 .payout-amount {
   font-size: 11px;
+}
+
+.rank-badge {
+  display: inline-block;
+  border: 2px solid var(--color-fg, #535353);
+  padding: 1px 4px;
+  font-size: 7px;
+  margin-right: 2px;
 }
 
 /* Empty state */

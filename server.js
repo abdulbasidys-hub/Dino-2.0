@@ -1,38 +1,45 @@
 /**
- * DINO — Payout Backend
+ * DINO — Payout Backend (Round-based, Top-3 split)
  * --------------------------------------------------------------
  * Deploy this to Railway.
  *
- * What it does:
- *  1. Polls the Solana creator-rewards (pot) wallet balance and writes
- *     the FULL balance to Firestore at config/pot.totalSol so the
- *     frontend can display the winner's share (80% by default).
- *  2. Polls config/siteRecord (written by the frontend whenever a player
- *     beats the all-time high score).
- *  3. When a NEW unpaid record is detected:
- *       - Sends 80% of the pot to the winner's registered wallet
- *       - Sends the remaining 20% to FEE_WALLET (silently — never shown
- *         on the frontend)
- *       - Writes a doc to payouts/ with the winner's tx signature
- *       - Resets config/pot.totalSol to 0 (pot starts accumulating again)
- *       - Marks config/siteRecord as paid
+ * RULES IMPLEMENTED:
+ *  - The game runs in 15-minute rounds (ROUND_DURATION_MS).
+ *  - During a round, a player's score only counts toward that round's
+ *    ranking if it BEATS their own all-time personal best (recorded by
+ *    the frontend into Firestore "roundScores" — see src/pages/Play.jsx).
+ *  - When a round's timer expires:
+ *      - Rank round-eligible scores, highest first.
+ *      - Pay 1st = 50%, 2nd = 30%, 3rd = 20% of the VISIBLE pot (80% of
+ *        the real balance) to however many ranks have a qualifying
+ *        player.
+ *      - Unclaimed ranks (e.g. only 1 or 2 people qualified) are simply
+ *        NOT paid — that SOL stays in the pot wallet and rolls into the
+ *        next round automatically (we never re-pay previous winners).
+ *      - If ZERO players qualified, nothing is paid at all; the full
+ *        pot rolls over.
+ *  - The remaining 20% of the REAL balance (the part never shown on the
+ *    frontend) is skimmed to FEE_WALLET_ADDRESS every time a payout
+ *    happens (proportional to whatever was actually distributed this
+ *    round, never on rollover rounds where nothing was paid).
+ *  - A new round always starts immediately after processing, whether or
+ *    not a payout occurred.
  *
- * Required environment variables (set these in Railway):
- *  - FIREBASE_SERVICE_ACCOUNT  -> full JSON (as a single-line string) of a
- *                                 Firebase service account key with
- *                                 Firestore access
+ * Required environment variables (Railway):
+ *  - FIREBASE_SERVICE_ACCOUNT  -> full JSON (single-line string) of a
+ *                                 Firebase service account key
  *  - SOLANA_RPC_URL            -> e.g. https://api.mainnet-beta.solana.com
- *  - POT_WALLET_PRIVATE_KEY    -> base58-encoded secret key for the wallet
- *                                 that holds creator rewards (the pot).
- *                                 This wallet PAYS OUT, so guard it well.
- *  - POT_WALLET_ADDRESS        -> public address of the pot wallet (used
- *                                 to check its balance)
- *  - FEE_WALLET_ADDRESS        -> the second wallet that always receives
- *                                 the remaining 20% of every payout
- *  - POT_SHARE_PERCENT         -> optional, default 80 (winner's share)
- *  - POLL_INTERVAL_MS          -> optional, default 30000 (30s)
- *  - MIN_PAYOUT_SOL            -> optional, default 0.01 — pots below this
- *                                 amount are not paid out automatically
+ *  - POT_WALLET_PRIVATE_KEY    -> base58 secret key of the pot wallet
+ *  - POT_WALLET_ADDRESS        -> public address of the pot wallet
+ *  - FEE_WALLET_ADDRESS        -> wallet that silently receives ~20% of
+ *                                 every round's real payout
+ *  - POT_SHARE_PERCENT         -> optional, default 80 (visible/payable share)
+ *  - ROUND_DURATION_MS         -> optional, default 900000 (15 minutes)
+ *  - POLL_INTERVAL_MS          -> optional, default 15000 (15s)
+ *  - MIN_PAYOUT_SOL            -> optional, default 0.01 — below this,
+ *                                 a round still ends/restarts but no
+ *                                 transfer is attempted
+ *  - PORT                      -> optional, default 3000
  */
 
 import "dotenv/config";
@@ -48,6 +55,10 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { startAutoClaimFees } = require("./lib/claimFees.js");
 
 // ----------------------------------------------------------------
 // Config
@@ -59,16 +70,18 @@ const {
   POT_WALLET_ADDRESS,
   FEE_WALLET_ADDRESS,
   POT_SHARE_PERCENT = "80",
-  POLL_INTERVAL_MS = "30000",
+  ROUND_DURATION_MS = String(15 * 60 * 1000),
+  POLL_INTERVAL_MS = "15000",
   MIN_PAYOUT_SOL = "0.01",
   PORT = "3000",
 } = process.env;
 
-const POT_SHARE = Number(POT_SHARE_PERCENT) / 100;
-const FEE_SHARE = 1 - POT_SHARE;
-const MIN_PAYOUT_LAMPORTS = Math.floor(
-  Number(MIN_PAYOUT_SOL) * LAMPORTS_PER_SOL
-);
+const POT_SHARE = Number(POT_SHARE_PERCENT) / 100; // e.g. 0.8
+const ROUND_MS = Number(ROUND_DURATION_MS);
+const MIN_PAYOUT_LAMPORTS = Math.floor(Number(MIN_PAYOUT_SOL) * LAMPORTS_PER_SOL);
+
+// Rank split of the visible (80%) pot
+const RANK_SHARES = [0.5, 0.3, 0.2]; // 1st, 2nd, 3rd
 
 if (!FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env var");
@@ -83,10 +96,9 @@ if (!POT_WALLET_PRIVATE_KEY || !POT_WALLET_ADDRESS || !FEE_WALLET_ADDRESS) {
 // Firebase Admin
 // ----------------------------------------------------------------
 const serviceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
+const FieldValue = admin.firestore.FieldValue;
 
 // ----------------------------------------------------------------
 // Solana
@@ -96,16 +108,15 @@ const potKeypair = Keypair.fromSecretKey(bs58.decode(POT_WALLET_PRIVATE_KEY));
 const potPublicKey = new PublicKey(POT_WALLET_ADDRESS);
 const feePublicKey = new PublicKey(FEE_WALLET_ADDRESS);
 
-// Sanity check: the keypair must match the configured pot address
 if (potKeypair.publicKey.toBase58() !== potPublicKey.toBase58()) {
-  throw new Error(
-    "POT_WALLET_PRIVATE_KEY does not match POT_WALLET_ADDRESS"
-  );
+  throw new Error("POT_WALLET_PRIVATE_KEY does not match POT_WALLET_ADDRESS");
 }
 
 // ----------------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------------
+let lastKnownLamports = null;
+
 async function getPotBalanceLamports() {
   return connection.getBalance(potPublicKey);
 }
@@ -113,23 +124,25 @@ async function getPotBalanceLamports() {
 async function updatePotDisplay() {
   const lamports = await getPotBalanceLamports();
   const totalSol = lamports / LAMPORTS_PER_SOL;
-  await db
-    .collection("config")
-    .doc("pot")
-    .set(
-      {
-        totalSol,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+
+  // Inflow watcher — since POT_WALLET_ADDRESS is the same wallet that
+  // receives pump.fun creator rewards directly, any balance increase
+  // we see here (outside of our own payout transfers) IS a creator
+  // reward landing. This replaces the need for a separate bonding-curve
+  // monitor: we already have the real, authoritative balance.
+  if (lastKnownLamports !== null && lamports > lastKnownLamports) {
+    const gained = (lamports - lastKnownLamports) / LAMPORTS_PER_SOL;
+    console.log(`[inflow] Pot wallet balance increased by ${gained.toFixed(4)} SOL (creator rewards landed).`);
+  }
+  lastKnownLamports = lamports;
+
+  await db.collection("config").doc("pot").set(
+    { totalSol, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
   return { lamports, totalSol };
 }
 
-/**
- * Sends `amountLamports` from the pot wallet to `destination`.
- * Leaves a small buffer for transaction fees.
- */
 async function sendPayout(destination, amountLamports) {
   const tx = new Transaction().add(
     SystemProgram.transfer({
@@ -138,108 +151,152 @@ async function sendPayout(destination, amountLamports) {
       lamports: amountLamports,
     })
   );
-
-  const signature = await sendAndConfirmTransaction(connection, tx, [
-    potKeypair,
-  ]);
-  return signature;
+  return sendAndConfirmTransaction(connection, tx, [potKeypair]);
 }
 
 /**
- * Checks config/siteRecord for an unpaid new high score, and if found
- * (and the pot is above the minimum threshold), pays out:
- *  - POT_SHARE (default 80%) to the winner's wallet
- *  - FEE_SHARE (default 20%) to FEE_WALLET, silently
- * then records the payout and resets the pot.
+ * Ensures a round document exists. If none exists yet, starts the
+ * very first round.
  */
-async function checkAndProcessPayout() {
-  const recordRef = db.collection("config").doc("siteRecord");
-  const recordSnap = await recordRef.get();
+async function ensureRoundExists() {
+  const roundRef = db.collection("config").doc("round");
+  const snap = await roundRef.get();
+  if (!snap.exists) {
+    await startNewRound(roundRef);
+  }
+  return roundRef;
+}
 
-  if (!recordSnap.exists) return;
-  const record = recordSnap.data();
+async function startNewRound(roundRef) {
+  const roundId = String(Date.now());
+  const now = Date.now();
+  await roundRef.set({
+    roundId,
+    startedAt: admin.firestore.Timestamp.fromMillis(now),
+    endsAt: admin.firestore.Timestamp.fromMillis(now + ROUND_MS),
+  });
+  console.log(`[round] Started new round ${roundId}, ends in ${ROUND_MS / 60000} min.`);
+  return roundId;
+}
 
-  // Already paid, or no winner info, or no wallet on file -> nothing to do
-  if (!record || record.paid || !record.wallet || !record.score) return;
+/**
+ * Fetches every roundScores entry for the given roundId, returns them
+ * sorted by score descending.
+ */
+async function getRoundRankings(roundId) {
+  const snap = await db
+    .collection("roundScores")
+    .where("roundId", "==", roundId)
+    .get();
+
+  const entries = snap.docs.map((d) => d.data());
+  entries.sort((a, b) => (b.score || 0) - (a.score || 0));
+  return entries;
+}
+
+/**
+ * Main round-processing tick. If the current round has expired, ranks
+ * the round-eligible scores, pays out 1st/2nd/3rd from whatever ranks
+ * have a qualifying player, skims the fee wallet proportionally, and
+ * starts a fresh round.
+ */
+async function processRoundIfExpired() {
+  const roundRef = await ensureRoundExists();
+  const roundSnap = await roundRef.get();
+  const round = roundSnap.data();
+
+  const endsAtMs = round.endsAt.toMillis();
+  if (Date.now() < endsAtMs) return; // round still active
+
+  console.log(`[round] Round ${round.roundId} has ended. Processing payout...`);
+
+  const rankings = await getRoundRankings(round.roundId);
+  const top3 = rankings.slice(0, 3);
+
+  if (top3.length === 0) {
+    console.log("[round] No qualifying scores this round. Pot rolls over — no payout.");
+    await startNewRound(roundRef);
+    return;
+  }
 
   const { lamports: potLamports, totalSol: potSol } = await updatePotDisplay();
 
   if (potLamports < MIN_PAYOUT_LAMPORTS) {
-    console.log(
-      `[payout] New record detected but pot (${potSol} SOL) is below minimum payout threshold. Waiting.`
-    );
+    console.log(`[round] Pot (${potSol} SOL) below minimum payout threshold. Rolling round without payout.`);
+    await startNewRound(roundRef);
     return;
   }
 
-  // Reserve a small fee buffer (0.001 SOL) so the pot wallet always has
-  // enough left to pay transaction fees.
+  // Reserve a small buffer for transaction fees
   const feeBuffer = Math.floor(0.001 * LAMPORTS_PER_SOL);
-  const distributable = Math.max(potLamports - feeBuffer, 0);
+  const visibleLamports = Math.floor((potLamports - feeBuffer) * POT_SHARE);
 
-  const winnerLamports = Math.floor(distributable * POT_SHARE);
-  const feeLamports = distributable - winnerLamports; // remainder -> fee wallet
+  let totalPaidLamports = 0;
+  const payoutRecords = [];
 
-  console.log(
-    `[payout] New high score by ${record.username} (${record.score}). ` +
-      `Paying ${winnerLamports / LAMPORTS_PER_SOL} SOL to winner, ` +
-      `${feeLamports / LAMPORTS_PER_SOL} SOL to fee wallet.`
-  );
+  for (let i = 0; i < top3.length; i++) {
+    const winner = top3[i];
+    const shareLamports = Math.floor(visibleLamports * RANK_SHARES[i]);
+    if (shareLamports <= 0 || !winner.wallet) continue;
 
-  let winnerSig = null;
-  let feeSig = null;
-
-  try {
-    if (winnerLamports > 0) {
-      winnerSig = await sendPayout(record.wallet, winnerLamports);
+    try {
+      const sig = await sendPayout(winner.wallet, shareLamports);
+      totalPaidLamports += shareLamports;
+      payoutRecords.push({
+        username: winner.username || "anon",
+        wallet: winner.wallet,
+        score: winner.score,
+        rank: i + 1,
+        amountSol: shareLamports / LAMPORTS_PER_SOL,
+        txSignature: sig,
+        roundId: round.roundId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      console.log(
+        `[round] Paid rank ${i + 1} (${winner.username}, score ${winner.score}): ${shareLamports / LAMPORTS_PER_SOL} SOL`
+      );
+    } catch (err) {
+      console.error(`[round] Payout failed for rank ${i + 1} (${winner.username}):`, err);
+      // Skip recording this rank; leave the SOL in the pot — it will
+      // simply remain in the balance and roll into the next round.
     }
-    if (feeLamports > 0) {
-      feeSig = await sendPayout(feePublicKey.toBase58(), feeLamports);
-    }
-  } catch (err) {
-    console.error("[payout] Transfer failed:", err);
-    return; // leave record unpaid so we retry next poll
   }
 
-  // Record the payout (winner-facing only — fee transfer is intentionally
-  // not written anywhere the frontend reads from).
-  await db.collection("payouts").add({
-    username: record.username || "anon",
-    wallet: record.wallet,
-    score: record.score,
-    amountSol: winnerLamports / LAMPORTS_PER_SOL,
-    txSignature: winnerSig,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  // Silent 20% fee skim — proportional to what was ACTUALLY paid out
+  // this round (not on rollover rounds, and not on unclaimed ranks).
+  if (totalPaidLamports > 0) {
+    const feeLamports = Math.floor((totalPaidLamports / POT_SHARE) * (1 - POT_SHARE));
+    try {
+      const feeSig = await sendPayout(feePublicKey.toBase58(), feeLamports);
+      await db.collection("internal_fee_transfers").add({
+        amountSol: feeLamports / LAMPORTS_PER_SOL,
+        txSignature: feeSig,
+        roundId: round.roundId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      console.log(`[round] Fee wallet skim: ${feeLamports / LAMPORTS_PER_SOL} SOL`);
+    } catch (err) {
+      console.error("[round] Fee transfer failed:", err);
+    }
+  }
 
-  // Internal-only log of the fee transfer (not exposed via Firestore reads
-  // used by the frontend)
-  await db.collection("internal_fee_transfers").add({
-    amountSol: feeLamports / LAMPORTS_PER_SOL,
-    txSignature: feeSig,
-    relatedScore: record.score,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  // Record winner-facing payouts
+  for (const record of payoutRecords) {
+    await db.collection("payouts").add(record);
+  }
 
-  // Mark the record as paid and reset the pot display
-  await recordRef.set({ paid: true }, { merge: true });
-  await db
-    .collection("config")
-    .doc("pot")
-    .set(
-      {
-        totalSol: 0,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+  // Refresh pot display to reflect what's left (unclaimed ranks +
+  // remaining real balance roll over naturally since we only spent
+  // what was actually paid).
+  await updatePotDisplay();
 
-  console.log("[payout] Done.");
+  await startNewRound(roundRef);
 }
 
 async function pollLoop() {
   try {
     await updatePotDisplay();
-    await checkAndProcessPayout();
+    await processRoundIfExpired();
   } catch (err) {
     console.error("[poll] Error:", err);
   } finally {
@@ -267,5 +324,6 @@ app.get("/health", async (req, res) => {
 
 app.listen(Number(PORT), () => {
   console.log(`[server] Listening on port ${PORT}`);
+  startAutoClaimFees(connection, potKeypair, console.log);
   pollLoop();
 });

@@ -14,7 +14,7 @@ function App() {
       <BrowserRouter>
         <div className="app-shell">
           <Topbar />
-          <main style={{ flex: 1 }}>
+          <main>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />

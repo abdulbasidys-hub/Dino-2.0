@@ -127,6 +127,7 @@ export default function LeaderboardFull() {
                   }
                   title={p.txSignature ? "View transaction on Solscan" : ""}
                 >
+                  {p.rank && <span className="rank-badge">#{p.rank}</span>}{" "}
                   {p.username?.toUpperCase() || "ANON"}
                 </span>
                 <span className="payout-amount">

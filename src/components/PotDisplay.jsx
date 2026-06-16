@@ -44,7 +44,8 @@ export default function PotDisplay() {
         </div>
       </div>
       <p className="pot-note">
-        THE NEXT ALL-TIME HIGH SCORE WINS THIS POT.
+        TOP 3 PLAYERS WHO BEAT THEIR OWN ALL-TIME BEST THIS ROUND SPLIT
+        THIS POT: 1ST 50% / 2ND 30% / 3RD 20%.
       </p>
       <div className="ca-row">
         <span title={SITE_CONFIG.contractAddress}>

@@ -73,7 +73,7 @@ function applyPageTheme(bg, fg) {
 }
 
 // ── DinoGame ──────────────────────────────────────────────────
-export default function DinoGame({ onGameOver }) {
+export default function DinoGame({ onGameOver, onScoreUpdate }) {
   const canvasRef    = useRef(null);
   const wrapRef      = useRef(null);
   const stateRef     = useRef(null);
@@ -128,17 +128,19 @@ export default function DinoGame({ onGameOver }) {
   const startGame = useCallback(() => {
     initState();
     setDisplayScore(0);
+    if (onScoreUpdate) onScoreUpdate(0);
     // Reset page to day
     applyPageTheme('rgb(255,255,255)', 'rgb(83,83,83)');
     gsRef.current = "running";
     setGameState("running");
-  }, [initState]);
+  }, [initState, onScoreUpdate]);
 
   const endGame = useCallback((finalScore) => {
     playDie();
     gsRef.current = "gameover";
     setGameState("gameover");
     const rounded = Math.floor(finalScore);
+    if (onScoreUpdate) onScoreUpdate(rounded);
     const newHigh = Math.max(highScoreRef.current, rounded);
     if (newHigh > highScoreRef.current) {
       highScoreRef.current = newHigh;
@@ -146,7 +148,7 @@ export default function DinoGame({ onGameOver }) {
       localStorage.setItem(HIGH_SCORE_KEY, String(newHigh));
     }
     if (onGameOver) onGameOver(rounded);
-  }, [onGameOver]);
+  }, [onGameOver, onScoreUpdate]);
 
   // ── input ─────────────────────────────────────────────────
   useEffect(() => {
@@ -234,6 +236,7 @@ export default function DinoGame({ onGameOver }) {
     s.score += dt * 0.012 * (1 + (s.speed - START_SPEED) / 10);
     const fl = Math.floor(s.score);
     setDisplayScore(fl);
+    if (onScoreUpdate) onScoreUpdate(fl);
 
     // milestone beep every 100 pts
     const ms = Math.floor(fl / 100) * 100;
