@@ -1,0 +1,450 @@
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #535353;
+  --page-bg: #ffffff;
+  --page-fg: #535353;
+  font-family: "Press Start 2P", monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  image-rendering: pixelated;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  background: var(--page-bg, #ffffff);
+  color: var(--page-fg, #535353);
+  font-family: "Press Start 2P", monospace;
+  -webkit-font-smoothing: none;
+  text-rendering: optimizeSpeed;
+  /* smooth whole-page day/night transition */
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+a {
+  color: var(--color-fg, #535353);
+  text-decoration: none;
+}
+
+button {
+  font-family: "Press Start 2P", monospace;
+  cursor: pointer;
+  background: var(--color-bg, #ffffff);
+  color: var(--color-fg, #535353);
+  border: 3px solid var(--color-fg, #535353);
+  border-radius: 0;
+  padding: 10px 16px;
+  font-size: 12px;
+  image-rendering: pixelated;
+  transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+button:hover {
+  background: var(--color-fg, #535353);
+  color: var(--color-bg, #ffffff);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+input {
+  font-family: "Press Start 2P", monospace;
+  background: var(--color-bg, #ffffff);
+  color: var(--color-fg, #535353);
+  border: 3px solid var(--color-fg, #535353);
+  border-radius: 0;
+  padding: 10px;
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+  transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+input:focus {
+  outline: 3px solid var(--color-fg, #535353);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-fg, #535353);
+  color: var(--color-bg, #ffffff);
+}
+
+/* Layout shell */
+
+.app-shell {
+  max-width: 600px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 3px solid var(--color-fg, #535353);
+  flex-wrap: wrap;
+  gap: 10px;
+  transition: border-color 0.3s;
+}
+
+.topbar-logo {
+  font-size: 14px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.topbar-nav button,
+.topbar-nav a {
+  font-size: 10px;
+  padding: 8px 10px;
+}
+
+/* Generic pixel panel */
+
+.panel {
+  border: 3px solid var(--color-fg, #535353);
+  padding: 16px;
+  margin: 16px 0;
+  transition: border-color 0.3s;
+}
+
+.panel-title {
+  font-size: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.panel-title .sub {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+/* Pot display */
+
+.pot-value {
+  font-size: 28px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.pot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pot-note {
+  font-size: 8px;
+  margin-top: 8px;
+  opacity: 0.7;
+  line-height: 1.6;
+}
+
+.ca-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  margin-top: 12px;
+  border: 2px dashed var(--color-fg);
+  padding: 8px;
+  word-break: break-all;
+}
+
+.ca-row button {
+  font-size: 8px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
+/* Leaderboard table */
+
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+
+.lb-table th,
+.lb-table td {
+  text-align: left;
+  padding: 8px 4px;
+  border-bottom: 2px solid var(--color-fg);
+  white-space: nowrap;
+}
+
+.lb-table th {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.lb-table td.wallet {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.lb-table td.wallet:hover {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.lb-table tr.you {
+  background: #f0f0f0;
+}
+
+.lb-rank {
+  width: 28px;
+}
+
+.lb-scroll {
+  overflow-x: auto;
+}
+
+/* Full-bleed wrapper for the game — escapes the 600px app-shell */
+.game-fullbleed {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  padding: 0;
+}
+
+.lb-columns {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.lb-column {
+  flex: 1;
+  min-width: 240px;
+  margin: 0;
+}
+
+/* Payouts list */
+
+.payout-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 2px solid var(--color-fg);
+  font-size: 9px;
+  flex-wrap: wrap;
+}
+
+.payout-item:last-child {
+  border-bottom: none;
+}
+
+.payout-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payout-wallet {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.payout-wallet:hover {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.payout-amount {
+  font-size: 11px;
+}
+
+/* Empty state */
+
+.empty-state {
+  font-size: 9px;
+  opacity: 0.7;
+  padding: 12px 0;
+  line-height: 1.8;
+}
+
+/* Auth forms */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.field-label {
+  font-size: 9px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.field-hint {
+  font-size: 8px;
+  opacity: 0.6;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+.form-error {
+  font-size: 9px;
+  border: 2px solid var(--color-fg);
+  padding: 8px;
+  background: #ffe5e5;
+}
+
+.form-success {
+  font-size: 9px;
+  border: 2px solid var(--color-fg);
+  padding: 8px;
+  background: #e5ffe9;
+}
+
+.auth-switch {
+  font-size: 8px;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+.auth-switch button {
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  font-size: 8px;
+}
+
+.auth-switch button:hover {
+  background: transparent;
+  color: var(--color-fg);
+}
+
+/* Buttons row */
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.btn-primary {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.btn-primary:hover {
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+/* Footer */
+
+.site-footer {
+  margin-top: auto;
+  padding: 24px 0;
+  font-size: 8px;
+  opacity: 0.6;
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* Loading */
+
+.loading-text {
+  font-size: 10px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* Game page */
+
+.game-page {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 16px 0;
+  width: 100%;
+}
+
+.game-canvas-wrap {
+  border-top: 3px solid var(--color-fg);
+  border-bottom: 3px solid var(--color-fg);
+  position: relative;
+  width: 100%;
+}
+
+.game-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.game-instructions {
+  font-size: 8px;
+  margin-top: 16px;
+  text-align: center;
+  line-height: 2;
+  opacity: 0.75;
+}
+
+.game-score-banner {
+  display: flex;
+  justify-content: space-between;
+  width: 600px;
+  max-width: 100%;
+  font-size: 9px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 480px) {
+  .topbar-logo {
+    font-size: 11px;
+  }
+  .pot-value {
+    font-size: 20px;
+  }
+  .lb-table {
+    font-size: 8px;
+  }
+}
