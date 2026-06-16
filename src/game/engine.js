@@ -150,9 +150,9 @@ export class Dino {
 
   get hitbox() {
     return {
-      x:      this.x + S * 3,
+      x:      this.x + S * 2,
       y:      this.y + S,
-      width:  this.width  - S * 6,
+      width:  this.width  - S * 4,
       height: this.height - S,
     };
   }
@@ -364,18 +364,21 @@ export class GroundDeco {
 // SPAWN HELPERS
 // ──────────────────────────────────────────────────────────────
 export function minObstacleGap(speed, canvasWidth) {
-  return Math.max(canvasWidth * 0.3, speed * 48);
+  return Math.max(canvasWidth * 0.22, speed * 38);
 }
 export function randomCactusGroup() {
   const r = Math.random();
-  if (r < 0.35) return { type:'small', count:1 };
-  if (r < 0.58) return { type:'large', count:1 };
-  if (r < 0.76) return { type:'small', count:2 };
-  if (r < 0.90) return { type:'large', count:2 };
+  if (r < 0.25) return { type:'small', count:1 };
+  if (r < 0.45) return { type:'large', count:1 };
+  if (r < 0.68) return { type:'small', count:2 };
+  if (r < 0.86) return { type:'large', count:2 };
   return { type:'small', count:3 };
 }
 export function randomBirdLevel() {
-  return ['low','medium','high'][Math.floor(Math.random()*3)];
+  const r = Math.random();
+  if (r < 0.45) return 'low';    // forces a duck
+  if (r < 0.80) return 'medium'; // forces a jump or duck under time pressure
+  return 'high';                 // occasional breather
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -422,4 +425,4 @@ export function rectsOverlap(a, b) {
          a.y < b.y+b.height && a.y+a.height > b.y;
 }
 
-export const BIRD_SCORE_THRESHOLD = 450;
+export const BIRD_SCORE_THRESHOLD = 280;

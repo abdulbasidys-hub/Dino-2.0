@@ -15,9 +15,9 @@ import {
   rectsOverlap,
 } from "./engine";
 
-const START_SPEED           = 7;
-const SPEED_INCREASE_AMOUNT = 0.25;
-const SPEED_INCREASE_EVERY  = 5000;
+const START_SPEED           = 8;
+const SPEED_INCREASE_AMOUNT = 0.45;
+const SPEED_INCREASE_EVERY  = 4000;
 const BASE_FRAME_MS         = 1000 / 60;
 const HIGH_SCORE_KEY        = "dino_high_score";
 
@@ -258,7 +258,7 @@ export default function DinoGame({ onGameOver, onScoreUpdate }) {
     const gap = minObstacleGap(s.speed, s.canvasWidth);
     if (s.distSinceSpawn >= gap) {
       s.distSinceSpawn = 0;
-      if (s.birdsEnabled && Math.random() < 0.28) {
+      if (s.birdsEnabled && Math.random() < 0.42) {
         s.obstacles.push(new Bird(s.canvasWidth + 10, randomBirdLevel()));
       } else {
         const { type, count } = randomCactusGroup();
