@@ -30,8 +30,8 @@ export function computeCamera(canvasPxWidth) {
 // PHYSICS
 // ================================================================
 const GRAVITY           = 0.0034;   // normal gravity — applies once not held, or after release
-const HOLD_GRAVITY       = GRAVITY * 0.35; // weakened gravity while actively held & ascending
-const LAUNCH_VEL         = -0.42;   // always-instant launch velocity, every press
+const HOLD_GRAVITY       = GRAVITY * 0.32; // weakened gravity while actively held & ascending
+const LAUNCH_VEL         = -0.48;   // always-instant launch velocity, every press
 export const JUMP_HOLD_WINDOW = 1000; // ms cap on how long the hold-assist can extend a jump
 const FLIGHT_GRAVITY    = 0.0012;
 const FLIGHT_FLAP_VEL   = -0.42;
