@@ -21,7 +21,7 @@ export const getGameWidth = () => _gameW;
 // tall screens. Returns both the scale and how many ref-units of
 // width are now visible (always equal to the clamped target).
 export function computeCamera(canvasPxWidth) {
-  const targetWidth = Math.max(950, Math.min(2000, canvasPxWidth * 1.4));
+  const targetWidth = Math.max(900, Math.min(1500, canvasPxWidth * 1.15));
   const scale = canvasPxWidth / targetWidth;
   return { scale, gameW: targetWidth };
 }
@@ -39,7 +39,7 @@ const FLIGHT_FLAP_VEL   = -0.42;
 // ================================================================
 // SPRITE RENDERER
 // ================================================================
-const S = 2; // scale factor per sprite pixel
+const S = 2.4; // scale factor per sprite pixel
 
 function drawSprite(ctx, sprite, ox, oy, color) {
   ctx.fillStyle = color;
@@ -73,19 +73,23 @@ const DINO_BODY = [
   [0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
 ];
-const LEGS_A = [
+// Run cycle: each frame pairs one PLANTED leg (full length, foot
+// trailing slightly back) with one LIFTED leg (bent knee, swinging
+// forward) — instead of one leg nearly disappearing, both legs stay
+// clearly visible in a believable mid-stride pose.
+const LEGS_A = [ // left leg lifted/forward, right leg planted
   [0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+const LEGS_B = [ // left leg planted, right leg lifted/forward
   [0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
   [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-const LEGS_B = [
-  [0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
 ];
 const LEGS_JUMP = [
   [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -113,13 +117,13 @@ const DUCK_BODY = [
   [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
-const DUCK_LEGS_A = [
-  [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-const DUCK_LEGS_B = [
+const DUCK_LEGS_A = [ // left lifted/forward, right planted
   [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+const DUCK_LEGS_B = [ // left planted, right lifted/forward
+  [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
 
 const BODY_ROWS = DINO_BODY.length;

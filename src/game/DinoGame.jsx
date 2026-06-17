@@ -47,6 +47,69 @@ function playGapFall()   { beep(180,'sawtooth',0.3,0.25); }
 function playFlap()      { beep(350,'square',0.06,0.08); }
 
 // ================================================================
+// BACKGROUND MUSIC — simple looping chiptune-style melody + bass,
+// synthesised (no audio file). Runs on its own gain node so the
+// mute button only affects music, never the sound effects above.
+// ================================================================
+const MUSIC_MUTE_KEY = "dino_music_muted";
+let musicGain = null;
+let musicTimerId = null;
+let musicStep = 0;
+let musicMuted = localStorage.getItem(MUSIC_MUTE_KEY) === "1";
+
+// A short 16-step bassline + melody, in Hz. 0 = rest.
+const MUSIC_BASS    = [110,0,110,0,131,0,110,0, 98,0,98,0,87,0,98,0];
+const MUSIC_MELODY  = [0,440,0,523,0,440,0,392, 0,392,0,349,0,392,0,330];
+const MUSIC_STEP_MS = 180;
+
+function ensureMusicGain() {
+  const a = ac();
+  if (!musicGain) {
+    musicGain = a.createGain();
+    musicGain.gain.value = musicMuted ? 0 : 0.05;
+    musicGain.connect(a.destination);
+  }
+  return musicGain;
+}
+
+function musicNote(freq, type, dur, vol) {
+  if (freq <= 0) return;
+  try {
+    const a = ac();
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, a.currentTime);
+    g.gain.setValueAtTime(vol, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+    o.connect(g); g.connect(ensureMusicGain());
+    o.start(); o.stop(a.currentTime + dur);
+  } catch {}
+}
+
+function startMusic() {
+  if (musicTimerId) return; // already running
+  ensureMusicGain();
+  const tick = () => {
+    musicNote(MUSIC_BASS[musicStep % MUSIC_BASS.length], 'triangle', MUSIC_STEP_MS / 1000 * 0.9, 0.5);
+    musicNote(MUSIC_MELODY[musicStep % MUSIC_MELODY.length], 'square', MUSIC_STEP_MS / 1000 * 0.7, 0.35);
+    musicStep++;
+    musicTimerId = setTimeout(tick, MUSIC_STEP_MS);
+  };
+  tick();
+}
+
+function stopMusic() {
+  if (musicTimerId) { clearTimeout(musicTimerId); musicTimerId = null; }
+}
+
+function setMusicMuted(muted) {
+  musicMuted = muted;
+  localStorage.setItem(MUSIC_MUTE_KEY, muted ? "1" : "0");
+  if (musicGain) musicGain.gain.value = muted ? 0 : 0.05;
+}
+function isMusicMuted() { return musicMuted; }
+
+// ================================================================
 // PAGE THEME
 // ================================================================
 function applyPageTheme(bg, fg) {
@@ -77,6 +140,15 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
   );
   const highScoreRef = useRef(highScore);
   useEffect(() => { highScoreRef.current = highScore; }, [highScore]);
+
+  const [isMuted, setIsMuted] = useState(() => isMusicMuted());
+  const toggleMusic = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      setMusicMuted(next);
+      return next;
+    });
+  }, []);
 
   // ── Immersive mode ────────────────────────────────────────
   const setImmersive = useCallback((on) => {
@@ -166,6 +238,7 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
     applyPageTheme('rgb(255,255,255)','rgb(83,83,83)');
     setImmersive(true);
     setTimeout(resize, 50); // let immersive CSS apply first
+    startMusic(); // no-ops if already playing — keeps looping through restarts
     gsRef.current = "running";
     setGameState("running");
   }, [initState, onScoreUpdate, setImmersive, resize]);
@@ -183,6 +256,7 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       localStorage.setItem(HIGH_SCORE_KEY, String(newHigh));
     }
     if (onGameOver) onGameOver(rounded);
+    // Music keeps playing through the game-over screen intentionally
   }, [onGameOver, onScoreUpdate]);
 
   const exitToPage = useCallback(() => {
@@ -191,7 +265,13 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
     gsRef.current = "idle";
     setGameState("idle");
     applyPageTheme('rgb(255,255,255)','rgb(83,83,83)');
+    stopMusic();
   }, [setImmersive, resize]);
+
+  // Stop music if the component unmounts while still playing
+  useEffect(() => {
+    return () => stopMusic();
+  }, []);
 
   // ── Input ─────────────────────────────────────────────────
   useEffect(() => {
@@ -661,6 +741,14 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
     <div className="game-page">
       <div ref={wrapRef} className="game-canvas-wrap" style={{ width: '100%' }}>
         <canvas ref={canvasRef} tabIndex={0} style={{ display:'block', width:'100%' }} />
+        <button
+          className="music-toggle-btn"
+          onClick={toggleMusic}
+          aria-label={isMuted ? "Unmute music" : "Mute music"}
+          title={isMuted ? "Unmute music" : "Mute music"}
+        >
+          {isMuted ? "🔇" : "🔊"}
+        </button>
       </div>
       {gameState === 'idle' && (
         <div className="game-instructions">

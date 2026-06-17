@@ -12,12 +12,22 @@ import { db } from "../lib/firebase";
 import DinoGame from "../game/DinoGame";
 import RoundTimerBar from "../components/RoundTimerBar";
 
+const GUEST_CHOICE_KEY = "dino_play_as_guest";
+
 export default function Play() {
   const { user, profile, refreshProfile } = useAuth();
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [liveScore, setLiveScore] = useState(0);
   const [immersive, setImmersive] = useState(false);
+  const [guestChosen, setGuestChosen] = useState(
+    () => localStorage.getItem(GUEST_CHOICE_KEY) === "1"
+  );
+
+  const chooseGuest = () => {
+    localStorage.setItem(GUEST_CHOICE_KEY, "1");
+    setGuestChosen(true);
+  };
 
   const handleGameOver = async (score) => {
     // Guests can play — their score just doesn't save
@@ -72,6 +82,22 @@ export default function Play() {
       setSaving(false);
     }
   };
+
+  if (!user && !guestChosen) {
+    return (
+      <section className="panel">
+        <div className="panel-title"><span>PLAY DINO</span></div>
+        <p className="empty-state">
+          LOG IN TO TRACK YOUR SCORES AND BE ELIGIBLE FOR THE POT, OR JUMP
+          STRAIGHT IN AS A GUEST (GUEST SCORES AREN'T SAVED).
+        </p>
+        <div className="btn-row">
+          <Link to="/login"><button className="btn-primary">LOG IN</button></Link>
+          <button onClick={chooseGuest}>PLAY AS GUEST</button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div>
