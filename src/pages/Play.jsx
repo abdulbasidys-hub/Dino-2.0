@@ -14,12 +14,17 @@ import RoundTimerBar from "../components/RoundTimerBar";
 
 export default function Play() {
   const { user, profile, refreshProfile } = useAuth();
-  const [result, setResult] = useState(null); // { score, isPersonalBest, qualifiedForRound }
+  const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [liveScore, setLiveScore] = useState(0);
+  const [immersive, setImmersive] = useState(false);
 
   const handleGameOver = async (score) => {
-    if (!user) return;
+    // Guests can play — their score just doesn't save
+    if (!user) {
+      setResult({ score, isGuest: true });
+      return;
+    }
     setSaving(true);
     try {
       const userRef = doc(db, "users", user.uid);
@@ -28,7 +33,6 @@ export default function Play() {
       const priorBest = current.highScore || 0;
       const isPersonalBest = score > priorBest;
 
-      // Always update the player's all-time stats
       await updateDoc(userRef, {
         highScore: Math.max(priorBest, score),
         gamesPlayed: (current.gamesPlayed || 0) + 1,
@@ -36,21 +40,14 @@ export default function Play() {
         lastPlayedAt: serverTimestamp(),
       });
 
-      // Round eligibility: the score only counts toward the current
-      // round's pot if it BEATS the player's pre-round all-time best.
-      // We record it keyed by the active roundId so the backend can
-      // rank round-eligible scores when the 15-minute timer expires.
       let qualifiedForRound = false;
       if (isPersonalBest) {
         const roundSnap = await getDoc(doc(db, "config", "round"));
         const roundId = roundSnap.exists() ? roundSnap.data().roundId : null;
-
         if (roundId) {
           const entryRef = doc(db, "roundScores", `${roundId}_${user.uid}`);
           const entrySnap = await getDoc(entryRef);
           const existingRoundBest = entrySnap.exists() ? entrySnap.data().score || 0 : 0;
-
-          // Only write if this beats whatever they already logged this round
           if (score > existingRoundBest) {
             await setDoc(entryRef, {
               roundId,
@@ -58,7 +55,7 @@ export default function Play() {
               username: profile?.username || "anon",
               wallet: profile?.wallet || "",
               score,
-              priorBest, // the personal best this score had to beat
+              priorBest,
               achievedAt: serverTimestamp(),
             });
             qualifiedForRound = true;
@@ -76,71 +73,73 @@ export default function Play() {
     }
   };
 
-  if (!user) {
-    return (
-      <section className="panel">
-        <div className="panel-title">
-          <span>PLAY</span>
-        </div>
-        <p className="empty-state">
-          YOU NEED AN ACCOUNT TO HAVE YOUR SCORE TRACKED AND TO BE ELIGIBLE
-          FOR THE POT.
-        </p>
-        <div className="btn-row">
-          <Link to="/register">
-            <button className="btn-primary">CREATE ACCOUNT</button>
-          </Link>
-          <Link to="/login">
-            <button>LOG IN</button>
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <div>
-      <div className="game-fullbleed">
-        <DinoGame onGameOver={handleGameOver} onScoreUpdate={setLiveScore} />
+      {/* Game takes over the full screen when immersive */}
+      <div className={immersive ? "game-immersive-wrap" : "game-fullbleed"}>
+        <DinoGame
+          onGameOver={handleGameOver}
+          onScoreUpdate={setLiveScore}
+          onImmersiveChange={setImmersive}
+        />
       </div>
 
-      <div className="play-stats-row">
-        <div className="play-stat">
-          <span className="label">SCORE</span>
-          <span className="value">{String(liveScore).padStart(5, "0")}</span>
-        </div>
-        <RoundTimerBar />
-      </div>
-
-      {result && (
-        <section className="panel">
-          <div className="panel-title">
-            <span>RUN COMPLETE</span>
+      {/* Below-canvas stats only visible when NOT immersive */}
+      {!immersive && (
+        <>
+          <div className="play-stats-row">
+            <div className="play-stat">
+              <span className="label">SCORE</span>
+              <span className="value">{String(liveScore).padStart(5, "0")}</span>
+            </div>
+            <RoundTimerBar />
           </div>
-          <p style={{ fontSize: "10px", lineHeight: "2" }}>
-            SCORE: {String(result.score).padStart(5, "0")}
-            <br />
-            YOUR BEST: {String(Math.max(profile?.highScore || 0, result.score)).padStart(5, "0")}
-            {result.qualifiedForRound && (
-              <>
-                <br />
-                <strong>NEW PERSONAL BEST — YOU'RE IN THIS ROUND'S RANKING!</strong>
-                <br />
-                IF YOU FINISH IN THE TOP 3 WHEN THE TIMER ENDS, YOU'LL BE
-                PAID FROM THE POT AUTOMATICALLY.
-              </>
-            )}
-            {result.error && (
-              <>
-                <br />
-                COULD NOT SAVE SCORE — CHECK YOUR CONNECTION.
-              </>
-            )}
-          </p>
-        </section>
-      )}
 
-      {saving && <p className="empty-state">SAVING SCORE...</p>}
+          {result && result.isGuest && (
+            <section className="panel">
+              <div className="panel-title"><span>NICE RUN</span></div>
+              <p style={{ fontSize: "10px", lineHeight: "2" }}>
+                SCORE: {String(result.score).padStart(5, "0")}
+                <br />
+                PLAYING AS GUEST — YOUR SCORE WAS NOT SAVED.
+                <br />
+                CREATE AN ACCOUNT TO TRACK YOUR SCORES AND WIN FROM THE POT.
+              </p>
+              <div className="btn-row">
+                <Link to="/register"><button className="btn-primary">CREATE ACCOUNT</button></Link>
+                <Link to="/login"><button>LOG IN</button></Link>
+              </div>
+            </section>
+          )}
+
+          {result && !result.isGuest && (
+            <section className="panel">
+              <div className="panel-title"><span>RUN COMPLETE</span></div>
+              <p style={{ fontSize: "10px", lineHeight: "2" }}>
+                SCORE: {String(result.score).padStart(5, "0")}
+                <br />
+                YOUR BEST: {String(Math.max(profile?.highScore || 0, result.score)).padStart(5, "0")}
+                {result.qualifiedForRound && (
+                  <>
+                    <br />
+                    <strong>NEW PERSONAL BEST — YOU'RE IN THIS ROUND'S RANKING!</strong>
+                    <br />
+                    IF YOU FINISH IN THE TOP 3 WHEN THE TIMER ENDS, YOU'LL BE PAID FROM THE POT AUTOMATICALLY.
+                  </>
+                )}
+                {result.error && (
+                  <>
+                    <br />
+                    COULD NOT SAVE SCORE — CHECK YOUR CONNECTION.
+                  </>
+                )}
+              </p>
+            </section>
+          )}
+
+          {saving && <p className="empty-state">SAVING SCORE...</p>}
+        </>
+      )}
     </div>
   );
 }

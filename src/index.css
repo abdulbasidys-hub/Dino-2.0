@@ -498,13 +498,10 @@ input:focus {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 16px 0;
   width: 100%;
 }
 
 .game-canvas-wrap {
-  border-top: 3px solid var(--color-fg);
-  border-bottom: 3px solid var(--color-fg);
   position: relative;
   width: 100%;
 }
@@ -513,6 +510,7 @@ input:focus {
   display: block;
   width: 100%;
   height: auto;
+  outline: none;
 }
 
 .game-instructions {
@@ -521,6 +519,84 @@ input:focus {
   text-align: center;
   line-height: 2;
   opacity: 0.75;
+}
+
+/* ── Immersive mode (game takes over entire viewport) ────── */
+
+body.game-immersive {
+  overflow: hidden !important;
+}
+
+body.game-immersive .topbar,
+body.game-immersive .site-footer {
+  display: none !important;
+}
+
+body.game-immersive .app-shell {
+  padding: 0;
+  max-width: none;
+}
+
+.game-immersive-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--color-bg, #ffffff);
+}
+
+.game-immersive-wrap .game-page {
+  height: 100vh;
+  padding: 0;
+}
+
+.game-immersive-wrap .game-canvas-wrap {
+  height: 100vh;
+  border: none;
+}
+
+.game-immersive-wrap .game-canvas-wrap canvas {
+  width: 100vw;
+  height: 100vh;
+}
+
+.game-immersive-wrap .game-instructions {
+  display: none;
+}
+
+/* ── Mobile landscape prompt ─────────────────────────────── */
+
+.landscape-prompt {
+  display: none;
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .game-immersive-wrap .landscape-prompt {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    background: var(--color-bg, #ffffff);
+    color: var(--color-fg, #535353);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    text-align: center;
+    padding: 24px;
+  }
+  .landscape-prompt-icon {
+    font-size: 48px;
+    animation: rotate-hint 1.5s ease-in-out infinite;
+  }
+  .landscape-prompt-text {
+    font-family: "Press Start 2P", monospace;
+    font-size: 10px;
+    line-height: 2;
+  }
+  @keyframes rotate-hint {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
 }
 
 .game-score-banner {
