@@ -465,6 +465,14 @@ async function pollLoop() {
 // Minimal HTTP server (Railway requires a listening port)
 // ----------------------------------------------------------------
 const app = express();
+app.use(express.json());
+
+// Allow the frontend (Vercel) to call this backend
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "dino-payout-backend" });
@@ -476,6 +484,20 @@ app.get("/health", async (req, res) => {
     res.json({ status: "ok", potSol: totalSol });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+// Wallet holding check — called by the frontend during registration and
+// game-over. The browser never touches Solana RPC directly; it asks
+// this endpoint which runs server-side using the proper SOLANA_RPC_URL.
+app.get("/api/verify-wallet", async (req, res) => {
+  try {
+    const { wallet } = req.query;
+    if (!wallet) return res.status(400).json({ error: "wallet required" });
+    const result = await checkHolding(wallet);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
