@@ -44,8 +44,10 @@ export default function PotDisplay() {
         </div>
       </div>
       <p className="pot-note">
-        TOP 3 PLAYERS WHO BEAT THEIR OWN ALL-TIME BEST THIS ROUND SPLIT
-        THIS POT: 1ST 50% / 2ND 30% / 3RD 20%.
+        TOP 3 EACH ROUND GET PAID {SITE_CONFIG.fixedFirstSol} / {SITE_CONFIG.fixedSecondSol} / {SITE_CONFIG.fixedThirdSol} SOL
+        WHEN THE POT CAN COVER IT — OTHERWISE THE POT SPLITS 50/30/20
+        INSTEAD. MUST HOLD {SITE_CONFIG.minHoldingSol}+ SOL WORTH OF{" "}
+        {SITE_CONFIG.tokenTicker} TO QUALIFY.
       </p>
       <div className="ca-row">
         <span title={SITE_CONFIG.contractAddress}>

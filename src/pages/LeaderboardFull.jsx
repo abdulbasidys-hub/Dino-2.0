@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   collection,
+  doc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
+  where,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
@@ -15,31 +18,47 @@ export default function LeaderboardFull() {
   const [payouts, setPayouts] = useState([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [loadingPayouts, setLoadingPayouts] = useState(true);
+  const [roundId, setRoundId] = useState(null);
   const { user } = useAuth();
 
+  // Track the active round — rankings reset every round
   useEffect(() => {
-    const loadPlayers = async () => {
-      try {
-        // Every user who has ever played, ranked by their personal best
-        // (highScore). Players who never set a score are excluded.
-        const q = query(
-          collection(db, "users"),
-          orderBy("highScore", "desc"),
-          limit(500)
-        );
-        const snap = await getDocs(q);
-        setPlayers(
-          snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((p) => (p.gamesPlayed || 0) > 0)
-        );
-      } catch (e) {
-        console.error("Failed to load leaderboard", e);
-      } finally {
+    const unsub = onSnapshot(doc(db, "config", "round"), (snap) => {
+      setRoundId(snap.exists() ? snap.data().roundId : null);
+    });
+    return unsub;
+  }, []);
+
+  // Live ranking for the current round (general pool — Hall of Fame
+  // members compete separately, see the Winners Board page).
+  useEffect(() => {
+    if (!roundId) {
+      setPlayers([]);
+      setLoadingPlayers(false);
+      return;
+    }
+    setLoadingPlayers(true);
+    const q = query(
+      collection(db, "roundScores"),
+      where("roundId", "==", roundId),
+      orderBy("score", "desc"),
+      limit(100)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setPlayers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoadingPlayers(false);
+      },
+      (err) => {
+        console.error("Failed to load leaderboard", err);
         setLoadingPlayers(false);
       }
-    };
+    );
+    return unsub;
+  }, [roundId]);
 
+  useEffect(() => {
     const loadPayouts = async () => {
       try {
         const q = query(
@@ -55,8 +74,6 @@ export default function LeaderboardFull() {
         setLoadingPayouts(false);
       }
     };
-
-    loadPlayers();
     loadPayouts();
   }, []);
 
@@ -65,7 +82,7 @@ export default function LeaderboardFull() {
       <section className="panel">
         <div className="panel-title">
           <span>FULL LEADERBOARD</span>
-          <span className="sub">EVERY PLAYER'S BEST SCORE</span>
+          <span className="sub">THIS ROUND — RESETS EVERY 15 MIN</span>
         </div>
       </section>
 
@@ -78,7 +95,7 @@ export default function LeaderboardFull() {
           {loadingPlayers && <p className="empty-state">LOADING...</p>}
 
           {!loadingPlayers && players.length === 0 && (
-            <p className="empty-state">NO ONE HAS PLAYED YET.</p>
+            <p className="empty-state">NO SCORES YET THIS ROUND.</p>
           )}
 
           {!loadingPlayers && players.length > 0 && (
@@ -93,10 +110,10 @@ export default function LeaderboardFull() {
                 </thead>
                 <tbody>
                   {players.map((p, i) => (
-                    <tr key={p.id} className={p.id === user?.uid ? "you" : ""}>
+                    <tr key={p.id} className={p.uid === user?.uid ? "you" : ""}>
                       <td className="lb-rank">{i + 1}</td>
                       <td>{p.username?.toUpperCase() || "ANON"}</td>
-                      <td>{String(p.highScore || 0).padStart(5, "0")}</td>
+                      <td>{String(p.score || 0).padStart(5, "0")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -127,7 +144,11 @@ export default function LeaderboardFull() {
                   }
                   title={p.txSignature ? "View transaction on Solscan" : ""}
                 >
-                  {p.rank && <span className="rank-badge">#{p.rank}</span>}{" "}
+                  {p.category === "winnersBoard" ? (
+                    <span className="rank-badge">HOF</span>
+                  ) : (
+                    p.rank && <span className="rank-badge">#{p.rank}</span>
+                  )}{" "}
                   {p.username?.toUpperCase() || "ANON"}
                 </span>
                 <span className="payout-amount">

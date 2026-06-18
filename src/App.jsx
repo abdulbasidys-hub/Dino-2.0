@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Play from "./pages/Play";
 import LeaderboardFull from "./pages/LeaderboardFull";
+import WinnersBoard from "./pages/WinnersBoard";
 import { SITE_CONFIG } from "./lib/config";
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/play" element={<Play />} />
               <Route path="/leaderboard" element={<LeaderboardFull />} />
+              <Route path="/winners" element={<WinnersBoard />} />
             </Routes>
           </main>
           <footer className="site-footer">

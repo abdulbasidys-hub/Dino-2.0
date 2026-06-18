@@ -9,6 +9,8 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
+import { checkTokenHolding } from "../lib/solanaCheck";
+import { SITE_CONFIG } from "../lib/config";
 import DinoGame from "../game/DinoGame";
 import RoundTimerBar from "../components/RoundTimerBar";
 
@@ -39,10 +41,16 @@ export default function Play() {
     try {
       const userRef = doc(db, "users", user.uid);
       const snap = await getDoc(userRef);
-      const current = snap.exists() ? snap.data() : { highScore: 0, gamesPlayed: 0 };
+      const current = snap.exists()
+        ? snap.data()
+        : { highScore: 0, gamesPlayed: 0, isWinner: false };
       const priorBest = current.highScore || 0;
       const isPersonalBest = score > priorBest;
+      const isWinner = !!current.isWinner;
+      const wallet = current.wallet || profile?.wallet || "";
 
+      // Personal stats are tracked unconditionally — these are purely
+      // informational now and have no bearing on round ranking.
       await updateDoc(userRef, {
         highScore: Math.max(priorBest, score),
         gamesPlayed: (current.gamesPlayed || 0) + 1,
@@ -51,21 +59,36 @@ export default function Play() {
       });
 
       let qualifiedForRound = false;
-      if (isPersonalBest) {
+      let holdingError = null;
+
+      // Live token-holding check — must be CURRENTLY holding to have
+      // this score count toward any round ranking, regardless of
+      // whether they qualified at registration.
+      const holding = await checkTokenHolding(wallet);
+      if (!holding.qualifies) {
+        holdingError =
+          holding.error ||
+          `MUST HOLD AT LEAST ${SITE_CONFIG.minHoldingSol} SOL WORTH OF ${SITE_CONFIG.tokenTicker} TO COMPETE.`;
+      } else {
         const roundSnap = await getDoc(doc(db, "config", "round"));
         const roundId = roundSnap.exists() ? roundSnap.data().roundId : null;
+
         if (roundId) {
-          const entryRef = doc(db, "roundScores", `${roundId}_${user.uid}`);
+          // Hall of Fame members compete in their own separate pool —
+          // the leaderboard resets every round for everyone, but
+          // winners no longer rank on the general board.
+          const collectionName = isWinner ? "winnersBoardScores" : "roundScores";
+          const entryRef = doc(db, collectionName, `${roundId}_${user.uid}`);
           const entrySnap = await getDoc(entryRef);
           const existingRoundBest = entrySnap.exists() ? entrySnap.data().score || 0 : 0;
+
           if (score > existingRoundBest) {
             await setDoc(entryRef, {
               roundId,
               uid: user.uid,
               username: profile?.username || "anon",
-              wallet: profile?.wallet || "",
+              wallet,
               score,
-              priorBest,
               achievedAt: serverTimestamp(),
             });
             qualifiedForRound = true;
@@ -74,7 +97,7 @@ export default function Play() {
       }
 
       await refreshProfile();
-      setResult({ score, isPersonalBest, qualifiedForRound });
+      setResult({ score, isPersonalBest, qualifiedForRound, isWinner, holdingError });
     } catch (e) {
       console.error("Failed to save score", e);
       setResult({ score, isPersonalBest: false, qualifiedForRound: false, error: true });
@@ -144,13 +167,28 @@ export default function Play() {
               <p style={{ fontSize: "10px", lineHeight: "2" }}>
                 SCORE: {String(result.score).padStart(5, "0")}
                 <br />
-                YOUR BEST: {String(Math.max(profile?.highScore || 0, result.score)).padStart(5, "0")}
-                {result.qualifiedForRound && (
+                YOUR ALL-TIME BEST: {String(Math.max(profile?.highScore || 0, result.score)).padStart(5, "0")}
+                {" "}(PERSONAL STAT ONLY — DOESN'T AFFECT RANKING)
+                {result.isWinner && (
                   <>
                     <br />
-                    <strong>NEW PERSONAL BEST — YOU'RE IN THIS ROUND'S RANKING!</strong>
+                    <strong>YOU'RE IN THE HALL OF FAME</strong> — THIS SCORE
+                    COMPETES IN THE WINNERS BOARD, NOT THE GENERAL LEADERBOARD.
+                  </>
+                )}
+                {result.holdingError && (
+                  <>
                     <br />
-                    IF YOU FINISH IN THE TOP 3 WHEN THE TIMER ENDS, YOU'LL BE PAID FROM THE POT AUTOMATICALLY.
+                    <strong>SCORE NOT COUNTED:</strong> {result.holdingError}
+                  </>
+                )}
+                {!result.holdingError && result.qualifiedForRound && (
+                  <>
+                    <br />
+                    <strong>YOU'RE ON THE BOARD THIS ROUND!</strong>
+                    <br />
+                    TOP {result.isWinner ? "1" : "3"} WHEN THE TIMER ENDS GET
+                    PAID FROM THE POT AUTOMATICALLY.
                   </>
                 )}
                 {result.error && (

@@ -4,11 +4,44 @@ export const SITE_CONFIG = {
   tokenTicker: "$DINO",
   // Contract address — replace with the real deployed mint address
   contractAddress: "Cn4PUMPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxBONK",
-  // Percentage of the pot shown/distributed to the high-score winner.
-  // The remaining percentage is sent to a second wallet silently by the
-  // backend (see server/server.js) and is never shown on the frontend.
+  // Percentage of the pot taken by the team. The remaining 80% is what's
+  // available for round winners. The team's cut is silently sent to a
+  // second wallet by the backend (see server/server.js) and is never
+  // shown on the frontend.
   potSharePercent: 80,
   solscanBase: "https://solscan.io",
+
+  // ── Round payout amounts ──────────────────────────────────────
+  // These are FIXED amounts paid to round winners when the pot can
+  // afford them. If the distributable 80% of the pot is below the sum
+  // of these three, the backend falls back to splitting whatever is
+  // available as 50/30/20 instead. The frontend only uses these for
+  // display copy — the backend (server/server.js) is the source of
+  // truth for actual transfers.
+  fixedFirstSol: 1,
+  fixedSecondSol: 0.5,
+  fixedThirdSol: 0.3,
+
+  // Flat reward paid to the single winner of the Hall of Fame /
+  // Winners Board each round, once it's unlocked.
+  winnersBoardRewardSol: 0.5,
+  // Number of all-time #1 round winners required before the Winners
+  // Board starts paying out (it can still be played before that).
+  winnersBoardUnlockCount: 5,
+
+  // ── Token holding gate ─────────────────────────────────────────
+  // Minimum SOL-equivalent value of $DINO a wallet must hold to
+  // register, and to have any score count toward round rankings.
+  // Verified live via a DexScreener price lookup + an on-chain SPL
+  // balance check — see src/lib/solanaCheck.js.
+  minHoldingSol: 0.2,
+
+  // Public, read-only Solana RPC endpoint used by the FRONTEND to
+  // check token balances. This is visible to anyone using the site,
+  // so do not put a private/paid RPC key with write access here.
+  // The public default below is rate-limited — for production traffic
+  // swap this for a free-tier endpoint from Helius, QuickNode, etc.
+  publicRpcUrl: "https://api.mainnet-beta.solana.com",
 };
 
 export const solscanAddress = (address) =>

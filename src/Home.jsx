@@ -16,10 +16,15 @@ export default function Home() {
           <span className="sub">{SITE_CONFIG.tokenTicker}</span>
         </div>
         <p style={{ fontSize: "9px", lineHeight: "2" }}>
-          PLAY THE DINO RUNNER. EVERY 15 MINUTES (SEE TIMER ABOVE), THE
-          TOP 3 PLAYERS WHO BEAT THEIR OWN ALL-TIME BEST DURING THAT
-          ROUND SPLIT THE POT — 50% / 30% / 20%. NO QUALIFYING SCORE
-          MEANS THE POT ROLLS OVER.
+          PLAY THE DINO RUNNER. THE LEADERBOARD RESETS EVERY 15-MINUTE
+          ROUND — EVERYONE STARTS AT ZERO EACH TIME. TOP 3 EACH ROUND
+          GET PAID FROM THE POT. MUST HOLD {SITE_CONFIG.minHoldingSol}+
+          SOL WORTH OF {SITE_CONFIG.tokenTicker} TO QUALIFY — WE CHECK
+          LIVE, EVERY GAME.
+          <br />
+          WIN A ROUND AND YOU'RE INDUCTED INTO THE HALL OF FAME — A
+          SEPARATE BOARD THAT UNLOCKS ITS OWN PAYOUTS ONCE{" "}
+          {SITE_CONFIG.winnersBoardUnlockCount} PLAYERS HAVE WON.
         </p>
         <div className="btn-row">
           <Link to="/play">

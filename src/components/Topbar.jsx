@@ -24,6 +24,7 @@ export default function Topbar() {
         <Link to="/">HOME</Link>
         <Link to="/play">PLAY</Link>
         <Link to="/leaderboard">LEADERBOARD</Link>
+        <Link to="/winners">WINNERS</Link>
         {user ? (
           <>
             <span className="topbar-username">

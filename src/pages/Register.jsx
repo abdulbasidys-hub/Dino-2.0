@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { SITE_CONFIG } from "../lib/config";
 
 export default function Register() {
   const { register } = useAuth();
@@ -92,15 +93,17 @@ export default function Register() {
             required
           />
           <p className="field-hint">
-            USED ONLY TO SEND YOUR WINNINGS IF YOU SET A NEW HIGH SCORE. YOU
-            DO NOT NEED TO HOLD THE TOKEN TO PLAY.
+            USED TO SEND YOUR WINNINGS. MUST CURRENTLY HOLD AT LEAST{" "}
+            {SITE_CONFIG.minHoldingSol} SOL WORTH OF {SITE_CONFIG.tokenTicker}{" "}
+            TO REGISTER AND TO COMPETE — WE VERIFY THIS LIVE, INCLUDING
+            EVERY TIME YOU FINISH A GAME.
           </p>
         </div>
 
         {error && <div className="form-error">{error}</div>}
 
         <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? "CREATING..." : "CREATE ACCOUNT"}
+          {loading ? "VERIFYING WALLET..." : "CREATE ACCOUNT"}
         </button>
       </form>
 

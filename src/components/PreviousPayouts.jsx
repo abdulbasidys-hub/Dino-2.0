@@ -59,7 +59,11 @@ export default function PreviousPayouts({ max = 10 }) {
               }
               title={p.txSignature ? "View transaction on Solscan" : ""}
             >
-              {p.rank && <span className="rank-badge">#{p.rank}</span>}{" "}
+              {p.category === "winnersBoard" ? (
+                <span className="rank-badge">HOF</span>
+              ) : (
+                p.rank && <span className="rank-badge">#{p.rank}</span>
+              )}{" "}
               {p.username?.toUpperCase() || "ANON"} — SCORE{" "}
               {String(p.score || 0).padStart(5, "0")}
             </span>

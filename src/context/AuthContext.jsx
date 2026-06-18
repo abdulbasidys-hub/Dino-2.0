@@ -13,6 +13,8 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { auth, db, usernameToEmail } from "../lib/firebase";
+import { checkTokenHolding } from "../lib/solanaCheck";
+import { SITE_CONFIG } from "../lib/config";
 
 const AuthContext = createContext(null);
 
@@ -46,6 +48,22 @@ export function AuthProvider({ children }) {
       throw new Error("Enter a valid Solana wallet address.");
     }
 
+    // Token-holding gate — this wallet must currently hold at least
+    // SITE_CONFIG.minHoldingSol worth of the token to register at all.
+    // This is a UX-level check; the real enforcement happens again at
+    // every game-over and again server-side before any payout.
+    const holding = await checkTokenHolding(wallet.trim());
+    if (!holding.qualifies) {
+      if (holding.error) {
+        throw new Error(
+          `Could not verify token holding (${holding.error}). Please try again in a moment.`
+        );
+      }
+      throw new Error(
+        `This wallet must hold at least ${SITE_CONFIG.minHoldingSol} SOL worth of ${SITE_CONFIG.tokenTicker} to register.`
+      );
+    }
+
     // Check username availability
     const existing = await getDoc(doc(db, "usernames", cleanUsername));
     if (existing.exists()) {
@@ -61,6 +79,7 @@ export function AuthProvider({ children }) {
       wallet: wallet.trim(),
       highScore: 0,
       gamesPlayed: 0,
+      isWinner: false,
       createdAt: serverTimestamp(),
     };
 
