@@ -32,7 +32,7 @@ export const SITE_CONFIG = {
   // ── Token holding gate ─────────────────────────────────────────
   // Your Railway backend URL — used by the frontend to call /api/verify-wallet.
   // Replace this with your actual Railway service URL.
-  backendUrl: "dino-20-production.up.railway.app",
+  backendUrl: "https://dino-20-production.up.railway.app",
 
   // Minimum token amount a wallet must hold to register and compete.
   // Checked as a raw balance (no price feed) — simpler and more reliable.
