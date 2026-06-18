@@ -3,7 +3,7 @@ export const SITE_CONFIG = {
   tokenName: "DINO",
   tokenTicker: "$DINO",
   // Contract address — replace with the real deployed mint address
-  contractAddress: "Cn4PUMPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxBONK",
+  contractAddress: "13SVgpzFcZf8vF6Tg1QV7vec82FdJrf4Kg2VEX4xpump",
   // Percentage of the pot taken by the team. The remaining 80% is what's
   // available for round winners. The team's cut is silently sent to a
   // second wallet by the backend (see server/server.js) and is never
@@ -32,7 +32,7 @@ export const SITE_CONFIG = {
   // ── Token holding gate ─────────────────────────────────────────
   // Your Railway backend URL — used by the frontend to call /api/verify-wallet.
   // Replace this with your actual Railway service URL.
-  backendUrl: "https://your-dino-backend.up.railway.app",
+  backendUrl: "dino-20-production.up.railway.app",
 
   // Minimum token amount a wallet must hold to register and compete.
   // Checked as a raw balance (no price feed) — simpler and more reliable.
