@@ -492,8 +492,13 @@ app.get("/health", async (req, res) => {
 // this endpoint which runs server-side using the proper SOLANA_RPC_URL.
 app.get("/api/verify-wallet", async (req, res) => {
   try {
-    const { wallet } = req.query;
+    const wallet = (req.query.wallet || "").trim();
     if (!wallet) return res.status(400).json({ error: "wallet required" });
+
+    // Validate it's a plausible Solana address before hitting the RPC
+    try { new PublicKey(wallet); }
+    catch { return res.status(400).json({ error: "Invalid Solana wallet address" }); }
+
     const result = await checkHolding(wallet);
     res.json(result);
   } catch (e) {

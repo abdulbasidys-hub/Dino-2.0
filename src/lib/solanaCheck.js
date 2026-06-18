@@ -8,8 +8,12 @@ export async function checkTokenHolding(walletAddress) {
   if (!walletAddress) {
     return { qualifies: false, balance: 0, error: "No wallet provided" };
   }
+  const cleaned = walletAddress.trim();
+  if (cleaned.length < 32 || cleaned.length > 44) {
+    return { qualifies: false, balance: 0, error: "Invalid wallet address length" };
+  }
   try {
-    const url = `${SITE_CONFIG.backendUrl}/api/verify-wallet?wallet=${encodeURIComponent(walletAddress)}`;
+    const url = `${SITE_CONFIG.backendUrl}/api/verify-wallet?wallet=${encodeURIComponent(cleaned)}`;
     const res  = await fetch(url);
     const data = await res.json();
     if (!res.ok) {
