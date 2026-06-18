@@ -71,7 +71,7 @@ export default function Play() {
       if (!holding.qualifies) {
         holdingError =
           holding.error ||
-          `MUST HOLD AT LEAST ${SITE_CONFIG.minHoldingSol} SOL WORTH OF ${SITE_CONFIG.tokenTicker} TO COMPETE.`;
+          `MUST HOLD AT LEAST 200,000 ${SITE_CONFIG.tokenTicker} TO COMPETE.`;
       } else {
         const roundSnap = await getDoc(doc(db, "config", "round"));
         const roundId = roundSnap.exists() ? roundSnap.data().roundId : null;

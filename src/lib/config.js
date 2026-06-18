@@ -30,11 +30,9 @@ export const SITE_CONFIG = {
   winnersBoardUnlockCount: 5,
 
   // ── Token holding gate ─────────────────────────────────────────
-  // Minimum SOL-equivalent value of $DINO a wallet must hold to
-  // register, and to have any score count toward round rankings.
-  // Verified live via a DexScreener price lookup + an on-chain SPL
-  // balance check — see src/lib/solanaCheck.js.
-  minHoldingSol: 0.2,
+  // Minimum token amount a wallet must hold to register and compete.
+  // Checked as a raw balance (no price feed) — simpler and more reliable.
+  minTokenAmount: 200_000,
 
   // Public, read-only Solana RPC endpoint used by the FRONTEND to
   // check token balances. This is visible to anyone using the site,

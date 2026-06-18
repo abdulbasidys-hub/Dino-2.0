@@ -106,7 +106,6 @@ const {
   POT_WALLET_ADDRESS,
   FEE_WALLET_ADDRESS,
   TOKEN_CA,
-  MIN_HOLDING_SOL = "0.2",
   FIXED_FIRST_SOL = "1",
   FIXED_SECOND_SOL = "0.5",
   FIXED_THIRD_SOL = "0.3",
@@ -129,7 +128,6 @@ const FIXED_TOTAL_LAMPORTS = FIXED_LAMPORTS.reduce((a, b) => a + b, 0);
 const FALLBACK_SHARES = [0.5, 0.3, 0.2]; // used only when the pot can't afford the fixed amounts
 const WB_REWARD_LAMPORTS = Math.floor(Number(WINNERS_BOARD_REWARD_SOL) * LAMPORTS_PER_SOL);
 const WB_UNLOCK_COUNT = Number(WINNERS_BOARD_UNLOCK_COUNT);
-const MIN_HOLDING_SOL_NUM = Number(MIN_HOLDING_SOL);
 
 if (!FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env var");
@@ -203,40 +201,9 @@ async function sendPayout(destination, amountLamports) {
 
 // ----------------------------------------------------------------
 // Token-holding verification (server-side, authoritative)
+// No price feed — just check raw token balance against MIN_TOKEN_AMOUNT.
 // ----------------------------------------------------------------
-const WSOL_MINT = "So11111111111111111111111111111111111111112";
-const PUMPFUN_API = "https://frontend-api.pump.fun/coins/";
-const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/tokens/";
-
-async function getTokenPriceInSol() {
-  // Try pump.fun first — works before graduation/DexScreener indexing.
-  try {
-    const res = await fetch(PUMPFUN_API + TOKEN_CA);
-    if (res.ok) {
-      const data = await res.json();
-      // pump.fun returns virtual_sol_reserves and virtual_token_reserves
-      // which gives us the bonding-curve spot price in SOL per token.
-      const solReserves = data?.virtual_sol_reserves;
-      const tokenReserves = data?.virtual_token_reserves;
-      if (solReserves && tokenReserves && tokenReserves > 0) {
-        return (solReserves / tokenReserves);
-      }
-    }
-  } catch {}
-
-  // Fall back to DexScreener for post-graduation/PumpSwap pairs.
-  const res = await fetch(DEXSCREENER_URL + TOKEN_CA);
-  if (!res.ok) throw new Error("price fetch failed");
-  const data = await res.json();
-  const pairs = data?.pairs || [];
-  const solPair = pairs.find(
-    (p) => p.quoteToken?.address === WSOL_MINT || p.quoteToken?.symbol === "SOL"
-  );
-  if (!solPair) throw new Error("no SOL-quoted pair found on pump.fun or DexScreener");
-  const price = parseFloat(solPair.priceNative);
-  if (!price || price <= 0) throw new Error("invalid price data");
-  return price;
-}
+const MIN_TOKEN_AMOUNT = 200_000;
 
 async function getTokenBalance(walletAddress) {
   const owner = new PublicKey(walletAddress);
@@ -249,21 +216,16 @@ async function getTokenBalance(walletAddress) {
 }
 
 async function checkHolding(walletAddress) {
-  if (!walletAddress) return { qualifies: false, valueInSol: 0, error: "no wallet" };
+  if (!walletAddress) return { qualifies: false, balance: 0, error: "no wallet" };
 
-  // Set to true once your token has a SOL-quoted pair on DexScreener.
   const HOLDING_GATE_ENABLED = true;
-  if (!HOLDING_GATE_ENABLED) return { qualifies: true, valueInSol: 0, error: null };
+  if (!HOLDING_GATE_ENABLED) return { qualifies: true, balance: 0, error: null };
 
   try {
-    const [balance, price] = await Promise.all([
-      getTokenBalance(walletAddress),
-      getTokenPriceInSol(),
-    ]);
-    const valueInSol = balance * price;
-    return { qualifies: valueInSol >= MIN_HOLDING_SOL_NUM, valueInSol, error: null };
+    const balance = await getTokenBalance(walletAddress);
+    return { qualifies: balance >= MIN_TOKEN_AMOUNT, balance, error: null };
   } catch (e) {
-    return { qualifies: false, valueInSol: 0, error: e.message };
+    return { qualifies: false, balance: 0, error: e.message };
   }
 }
 

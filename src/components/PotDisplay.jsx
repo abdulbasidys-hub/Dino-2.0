@@ -46,8 +46,7 @@ export default function PotDisplay() {
       <p className="pot-note">
         TOP 3 EACH ROUND GET PAID {SITE_CONFIG.fixedFirstSol} / {SITE_CONFIG.fixedSecondSol} / {SITE_CONFIG.fixedThirdSol} SOL
         WHEN THE POT CAN COVER IT — OTHERWISE THE POT SPLITS 50/30/20
-        INSTEAD. MUST HOLD {SITE_CONFIG.minHoldingSol}+ SOL WORTH OF{" "}
-        {SITE_CONFIG.tokenTicker} TO QUALIFY.
+        INSTEAD. MUST HOLD 200,000+ {SITE_CONFIG.tokenTicker} TO QUALIFY.
       </p>
       <div className="ca-row">
         <span title={SITE_CONFIG.contractAddress}>

@@ -93,10 +93,9 @@ export default function Register() {
             required
           />
           <p className="field-hint">
-            USED TO SEND YOUR WINNINGS. MUST CURRENTLY HOLD AT LEAST{" "}
-            {SITE_CONFIG.minHoldingSol} SOL WORTH OF {SITE_CONFIG.tokenTicker}{" "}
-            TO REGISTER AND TO COMPETE — WE VERIFY THIS LIVE, INCLUDING
-            EVERY TIME YOU FINISH A GAME.
+            USED TO SEND YOUR WINNINGS. MUST CURRENTLY HOLD AT LEAST
+            200,000 {SITE_CONFIG.tokenTicker} TO REGISTER AND TO COMPETE —
+            WE VERIFY THIS LIVE, INCLUDING EVERY TIME YOU FINISH A GAME.
           </p>
         </div>
 

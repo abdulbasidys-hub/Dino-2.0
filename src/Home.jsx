@@ -18,8 +18,8 @@ export default function Home() {
         <p style={{ fontSize: "9px", lineHeight: "2" }}>
           PLAY THE DINO RUNNER. THE LEADERBOARD RESETS EVERY 15-MINUTE
           ROUND — EVERYONE STARTS AT ZERO EACH TIME. TOP 3 EACH ROUND
-          GET PAID FROM THE POT. MUST HOLD {SITE_CONFIG.minHoldingSol}+
-          SOL WORTH OF {SITE_CONFIG.tokenTicker} TO QUALIFY — WE CHECK
+          GET PAID FROM THE POT. MUST HOLD 200,000+
+          {SITE_CONFIG.tokenTicker} TO QUALIFY — WE CHECK
           LIVE, EVERY GAME.
           <br />
           WIN A ROUND AND YOU'RE INDUCTED INTO THE HALL OF FAME — A

@@ -1,20 +1,14 @@
-// Checks whether a wallet currently holds at least SITE_CONFIG.minHoldingSol
-// worth of $DINO. Used at registration time and again every time a game
-// ends, since holding must be ongoing — selling after registering should
-// disqualify future scores, not just the initial signup.
+// Checks whether a wallet currently holds at least MIN_TOKEN_AMOUNT
+// of the token. No price feed needed — just a raw SPL balance check.
 //
-// IMPORTANT: this is a client-side check for UX purposes only. It can be
-// bypassed by a sufficiently determined user (e.g. editing the JS in dev
-// tools). The actual money is protected by an identical check run again
-// on the BACKEND immediately before any payout (see server/server.js) —
-// that is the real security boundary, not this file.
+// IMPORTANT: this is a client-side check for UX only. The real
+// enforcement is the identical check in server/server.js, which runs
+// immediately before any payout is sent.
 
 import { Connection, PublicKey } from "@solana/web3.js";
 import { SITE_CONFIG } from "./config";
 
-const WSOL_MINT = "So11111111111111111111111111111111111111112";
-const PUMPFUN_API = "https://frontend-api.pump.fun/coins/";
-const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/tokens/";
+const MIN_TOKEN_AMOUNT = 200_000;
 
 let connection = null;
 function getConnection() {
@@ -24,47 +18,10 @@ function getConnection() {
   return connection;
 }
 
-/**
- * Fetches the current price of the token in SOL.
- * Tries pump.fun first (works before graduation/DexScreener indexing),
- * then falls back to DexScreener for post-graduation PumpSwap pairs.
- */
-async function getTokenPriceInSol() {
-  // pump.fun bonding curve spot price — available immediately
-  try {
-    const res = await fetch(PUMPFUN_API + SITE_CONFIG.contractAddress);
-    if (res.ok) {
-      const data = await res.json();
-      const solReserves = data?.virtual_sol_reserves;
-      const tokenReserves = data?.virtual_token_reserves;
-      if (solReserves && tokenReserves && tokenReserves > 0) {
-        return solReserves / tokenReserves;
-      }
-    }
-  } catch {}
-
-  // DexScreener fallback for post-graduation PumpSwap pairs
-  const res = await fetch(DEXSCREENER_URL + SITE_CONFIG.contractAddress);
-  if (!res.ok) throw new Error("Price lookup failed");
-  const data = await res.json();
-  const pairs = data?.pairs || [];
-  const solPair = pairs.find(
-    (p) => p.quoteToken?.address === WSOL_MINT || p.quoteToken?.symbol === "SOL"
-  );
-  if (!solPair) throw new Error("No price data found on pump.fun or DexScreener");
-  const price = parseFloat(solPair.priceNative);
-  if (!price || price <= 0) throw new Error("Invalid price data");
-  return price;
-}
-
-/**
- * Sums the wallet's $DINO balance across any token accounts it holds
- * for this mint (normally just one).
- */
 async function getTokenBalance(walletAddress) {
   const owner = new PublicKey(walletAddress);
-  const mint = new PublicKey(SITE_CONFIG.contractAddress);
-  const resp = await getConnection().getParsedTokenAccountsByOwner(owner, { mint });
+  const mint  = new PublicKey(SITE_CONFIG.contractAddress);
+  const resp  = await getConnection().getParsedTokenAccountsByOwner(owner, { mint });
   if (resp.value.length === 0) return 0;
   return resp.value.reduce(
     (sum, acc) => sum + (acc.account.data.parsed.info.tokenAmount.uiAmount || 0),
@@ -73,30 +30,21 @@ async function getTokenBalance(walletAddress) {
 }
 
 /**
- * Returns { qualifies, valueInSol, balance, priceInSol, error }.
- * On any failure (bad wallet, RPC issue, no price data), qualifies is
- * false — this fails CLOSED, meaning we block rather than silently
- * allow when we can't verify. If your token is brand new and not yet
- * indexed by DexScreener, this will block everyone until it is.
+ * Returns { qualifies, balance, error }.
+ * qualifies = true if balance >= 200,000 tokens.
  */
 export async function checkTokenHolding(walletAddress) {
   if (!walletAddress) {
-    return { qualifies: false, valueInSol: 0, balance: 0, priceInSol: 0, error: "No wallet provided" };
+    return { qualifies: false, balance: 0, error: "No wallet provided" };
   }
   try {
-    const [balance, priceInSol] = await Promise.all([
-      getTokenBalance(walletAddress),
-      getTokenPriceInSol(),
-    ]);
-    const valueInSol = balance * priceInSol;
+    const balance = await getTokenBalance(walletAddress);
     return {
-      qualifies: valueInSol >= SITE_CONFIG.minHoldingSol,
-      valueInSol,
+      qualifies: balance >= MIN_TOKEN_AMOUNT,
       balance,
-      priceInSol,
       error: null,
     };
   } catch (e) {
-    return { qualifies: false, valueInSol: 0, balance: 0, priceInSol: 0, error: e.message };
+    return { qualifies: false, balance: 0, error: e.message };
   }
 }

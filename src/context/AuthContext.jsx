@@ -58,11 +58,11 @@ export function AuthProvider({ children }) {
       if (!holding.qualifies) {
         if (holding.error) {
           throw new Error(
-            `Could not verify token holding (${holding.error}). Please try again in a moment.`
+            `Could not verify token balance (${holding.error}). Please try again in a moment.`
           );
         }
         throw new Error(
-          `This wallet must hold at least ${SITE_CONFIG.minHoldingSol} SOL worth of ${SITE_CONFIG.tokenTicker} to register.`
+          `This wallet must hold at least 200,000 ${SITE_CONFIG.tokenTicker} to register.`
         );
       }
     }
