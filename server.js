@@ -205,9 +205,26 @@ async function sendPayout(destination, amountLamports) {
 // Token-holding verification (server-side, authoritative)
 // ----------------------------------------------------------------
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
+const PUMPFUN_API = "https://frontend-api.pump.fun/coins/";
 const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/tokens/";
 
 async function getTokenPriceInSol() {
+  // Try pump.fun first — works before graduation/DexScreener indexing.
+  try {
+    const res = await fetch(PUMPFUN_API + TOKEN_CA);
+    if (res.ok) {
+      const data = await res.json();
+      // pump.fun returns virtual_sol_reserves and virtual_token_reserves
+      // which gives us the bonding-curve spot price in SOL per token.
+      const solReserves = data?.virtual_sol_reserves;
+      const tokenReserves = data?.virtual_token_reserves;
+      if (solReserves && tokenReserves && tokenReserves > 0) {
+        return (solReserves / tokenReserves);
+      }
+    }
+  } catch {}
+
+  // Fall back to DexScreener for post-graduation/PumpSwap pairs.
   const res = await fetch(DEXSCREENER_URL + TOKEN_CA);
   if (!res.ok) throw new Error("price fetch failed");
   const data = await res.json();
@@ -215,7 +232,7 @@ async function getTokenPriceInSol() {
   const solPair = pairs.find(
     (p) => p.quoteToken?.address === WSOL_MINT || p.quoteToken?.symbol === "SOL"
   );
-  if (!solPair) throw new Error("no SOL-quoted pair found");
+  if (!solPair) throw new Error("no SOL-quoted pair found on pump.fun or DexScreener");
   const price = parseFloat(solPair.priceNative);
   if (!price || price <= 0) throw new Error("invalid price data");
   return price;
@@ -233,6 +250,11 @@ async function getTokenBalance(walletAddress) {
 
 async function checkHolding(walletAddress) {
   if (!walletAddress) return { qualifies: false, valueInSol: 0, error: "no wallet" };
+
+  // Set to true once your token has a SOL-quoted pair on DexScreener.
+  const HOLDING_GATE_ENABLED = true;
+  if (!HOLDING_GATE_ENABLED) return { qualifies: true, valueInSol: 0, error: null };
+
   try {
     const [balance, price] = await Promise.all([
       getTokenBalance(walletAddress),

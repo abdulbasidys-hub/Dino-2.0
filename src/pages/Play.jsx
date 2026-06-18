@@ -61,10 +61,13 @@ export default function Play() {
       let qualifiedForRound = false;
       let holdingError = null;
 
-      // Live token-holding check — must be CURRENTLY holding to have
-      // this score count toward any round ranking, regardless of
-      // whether they qualified at registration.
-      const holding = await checkTokenHolding(wallet);
+      // Live token-holding check — set HOLDING_GATE_ENABLED to true
+      // once your token has a SOL-quoted pair on DexScreener.
+      const HOLDING_GATE_ENABLED = true;
+      const holding = HOLDING_GATE_ENABLED
+        ? await checkTokenHolding(wallet)
+        : { qualifies: true, error: null };
+
       if (!holding.qualifies) {
         holdingError =
           holding.error ||

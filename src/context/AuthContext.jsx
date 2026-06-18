@@ -48,20 +48,23 @@ export function AuthProvider({ children }) {
       throw new Error("Enter a valid Solana wallet address.");
     }
 
-    // Token-holding gate — this wallet must currently hold at least
-    // SITE_CONFIG.minHoldingSol worth of the token to register at all.
-    // This is a UX-level check; the real enforcement happens again at
-    // every game-over and again server-side before any payout.
-    const holding = await checkTokenHolding(wallet.trim());
-    if (!holding.qualifies) {
-      if (holding.error) {
+    // Token-holding gate — set HOLDING_GATE_ENABLED to true once your
+    // token has a SOL-quoted trading pair on DexScreener. Until then,
+    // the price lookup will fail and block everyone from registering.
+    const HOLDING_GATE_ENABLED = true;
+
+    if (HOLDING_GATE_ENABLED) {
+      const holding = await checkTokenHolding(wallet.trim());
+      if (!holding.qualifies) {
+        if (holding.error) {
+          throw new Error(
+            `Could not verify token holding (${holding.error}). Please try again in a moment.`
+          );
+        }
         throw new Error(
-          `Could not verify token holding (${holding.error}). Please try again in a moment.`
+          `This wallet must hold at least ${SITE_CONFIG.minHoldingSol} SOL worth of ${SITE_CONFIG.tokenTicker} to register.`
         );
       }
-      throw new Error(
-        `This wallet must hold at least ${SITE_CONFIG.minHoldingSol} SOL worth of ${SITE_CONFIG.tokenTicker} to register.`
-      );
     }
 
     // Check username availability

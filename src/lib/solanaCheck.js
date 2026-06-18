@@ -13,6 +13,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { SITE_CONFIG } from "./config";
 
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
+const PUMPFUN_API = "https://frontend-api.pump.fun/coins/";
 const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/tokens/";
 
 let connection = null;
@@ -24,11 +25,25 @@ function getConnection() {
 }
 
 /**
- * Fetches the current price of $DINO in SOL via DexScreener.
- * Throws if no SOL-quoted pair is found (e.g. token too new/illiquid
- * to be indexed yet).
+ * Fetches the current price of the token in SOL.
+ * Tries pump.fun first (works before graduation/DexScreener indexing),
+ * then falls back to DexScreener for post-graduation PumpSwap pairs.
  */
 async function getTokenPriceInSol() {
+  // pump.fun bonding curve spot price — available immediately
+  try {
+    const res = await fetch(PUMPFUN_API + SITE_CONFIG.contractAddress);
+    if (res.ok) {
+      const data = await res.json();
+      const solReserves = data?.virtual_sol_reserves;
+      const tokenReserves = data?.virtual_token_reserves;
+      if (solReserves && tokenReserves && tokenReserves > 0) {
+        return solReserves / tokenReserves;
+      }
+    }
+  } catch {}
+
+  // DexScreener fallback for post-graduation PumpSwap pairs
   const res = await fetch(DEXSCREENER_URL + SITE_CONFIG.contractAddress);
   if (!res.ok) throw new Error("Price lookup failed");
   const data = await res.json();
@@ -36,7 +51,7 @@ async function getTokenPriceInSol() {
   const solPair = pairs.find(
     (p) => p.quoteToken?.address === WSOL_MINT || p.quoteToken?.symbol === "SOL"
   );
-  if (!solPair) throw new Error("No SOL-quoted trading pair found yet");
+  if (!solPair) throw new Error("No price data found on pump.fun or DexScreener");
   const price = parseFloat(solPair.priceNative);
   if (!price || price <= 0) throw new Error("Invalid price data");
   return price;
