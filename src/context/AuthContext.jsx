@@ -7,10 +7,15 @@ import {
   updateProfile,
 } from "firebase/auth";
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
+  limit,
+  query,
   serverTimestamp,
   setDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db, usernameToEmail } from "../lib/firebase";
 import { checkTokenHolding } from "../lib/solanaCheck";
@@ -71,6 +76,17 @@ export function AuthProvider({ children }) {
     const existing = await getDoc(doc(db, "usernames", cleanUsername));
     if (existing.exists()) {
       throw new Error("That username is already taken.");
+    }
+
+    // Check wallet uniqueness — one wallet per account
+    const walletQuery = query(
+      collection(db, "users"),
+      where("wallet", "==", wallet.trim()),
+      limit(1)
+    );
+    const walletSnap = await getDocs(walletQuery);
+    if (!walletSnap.empty) {
+      throw new Error("This wallet is already linked to an existing account.");
     }
 
     const email = usernameToEmail(cleanUsername);

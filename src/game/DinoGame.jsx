@@ -733,7 +733,7 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
 
       ctx.font = `${7*scale}px "Press Start 2P", monospace`;
       ctx.fillStyle = '#fff';
-      ctx.fillText('SPACE TO RESTART  |  ESC TO EXIT', cw/2, ch/2 + 85*scale);
+      ctx.fillText('TAP TO RESTART  |  ✕ TO EXIT', cw/2, ch/2 + 85*scale);
     }
   }
 
@@ -748,6 +748,16 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
           title={isMuted ? "Unmute music" : "Mute music"}
         >
           {isMuted ? "🔇" : "🔊"}
+        </button>
+        {/* Always-visible exit button — critical for mobile where
+            there is no Escape key. Sits top-right of the canvas. */}
+        <button
+          className="game-exit-btn"
+          onClick={exitToPage}
+          aria-label="Exit to home"
+          title="Exit to home"
+        >
+          ✕
         </button>
       </div>
       {gameState === 'idle' && (
