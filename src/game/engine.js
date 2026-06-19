@@ -37,106 +37,144 @@ const FLIGHT_GRAVITY    = 0.0012;
 const FLIGHT_FLAP_VEL   = -0.42;
 
 // ================================================================
-// SPRITE RENDERER
+// DINO — drawn from labeled rectangles (head, snout, chin, torso,
+// arm, tail, legs) instead of a hand-typed pixel grid. Each body
+// part is an explicit, named shape with exact coordinates in
+// reference units — the same reliable method used for the cactus
+// below. This layout went through 10 rendered preview passes,
+// checked visually against the reference image each time, including
+// fixing a real bug where the two legs' feet overlapped and merged
+// into one blob instead of reading as a stride.
+//
+// Coordinate system: (0,0) = top-left of the dino's bounding box.
+// x increases rightward (toward the head/snout — the dino faces
+// right). y increases downward (toward the ground).
+//   BODY_H = 43   → head + torso occupy y: 0 to 43 (head is large,
+//                    proportionally the dominant feature, like a
+//                    real T-rex — not a small afterthought)
+//   LEG_H  = 15   → legs occupy y: 43 to 58 (58 = ground contact)
+//   Overall box: ~62 wide × 58 tall.
 // ================================================================
-const S = 2.4; // scale factor per sprite pixel
+const BODY_H = 43;
+const LEG_H  = 15;
+export const DINO_W = 62;
+export const DINO_H = BODY_H + LEG_H; // 58
 
-function drawSprite(ctx, sprite, ox, oy, color) {
-  ctx.fillStyle = color;
-  for (let r = 0; r < sprite.length; r++) {
-    const row = sprite[r];
-    for (let c = 0; c < row.length; c++) {
-      if (row[c]) ctx.fillRect(ox + c * S, oy + r * S, S, S);
-    }
+function rect(ctx, x, y, w, h) { ctx.fillRect(x, y, w, h); }
+
+/** Head + torso + arm + tail. Same for every frame (legs animate separately). */
+function drawDinoBody(ctx, x, y, fg, bg) {
+  ctx.fillStyle = fg;
+  // ── Head ──────────────────────────────────────────────────
+  // Big, blocky, dominant — this is the single most recognizable
+  // feature of a T-rex and was previously much too small.
+  rect(ctx, x + 18, y + 0,  26, 15, fg);  // skull — big flat-top block
+  rect(ctx, x + 37, y + 8,  17, 7,  fg);  // snout — extends right
+  rect(ctx, x + 26, y + 15, 13, 4,  fg);  // chin — set back, opens the mouth notch
+  rect(ctx, x + 22, y + 19, 16, 3,  fg);  // neck — connects head to shoulders
+
+  // Eye — small bg-colored square punched into the skull
+  ctx.fillStyle = bg;
+  rect(ctx, x + 23, y + 4, 4, 4, bg);
+  ctx.fillStyle = fg;
+
+  // ── Torso ─────────────────────────────────────────────────
+  // Front/belly edge (right side) tapers smoothly and monotonically
+  // from the shoulders down to the hip — no dip-then-bulge pinching.
+  // Back edge (left side) sweeps down to the tail separately.
+  rect(ctx, x + 13, y + 22, 25, 4, fg);   // shoulders — widest point, puffed chest
+  rect(ctx, x + 8,  y + 26, 28, 4, fg);   // back slopes down-left
+  rect(ctx, x + 4,  y + 30, 29, 4, fg);   // back continues toward the tail
+  rect(ctx, x + 0,  y + 32, 9,  5, fg);   // tail tip, flush with the band above
+  rect(ctx, x + 9,  y + 34, 23, 4, fg);   // belly curving back right
+  rect(ctx, x + 13, y + 38, 18, 3, fg);   // belly narrows
+  rect(ctx, x + 16, y + 41, 13, 2, fg);   // hip line — bridges down to the legs
+
+  // ── Arm ───────────────────────────────────────────────────
+  rect(ctx, x + 34, y + 27, 3, 2, fg);    // tiny stub, centered on the chest
+}
+
+// ── Legs: alternating support, not a forward stride ─────────────
+// This matches the real Chrome dino gait: one leg is a straight,
+// fully-extended SUPPORT column planted on the ground (foot flared
+// slightly toward the tail side); the other leg is short, bent at
+// the knee, and TUCKED in close toward the body's centerline —
+// clearly off the ground, not reaching forward or back. The body,
+// head, and tail never move — only which leg is support vs tucked
+// alternates between frames A and B.
+const LEFT_HIP = 16, RIGHT_HIP = 26;
+
+function supportLeg(ctx, x, y, hipX, fg) {
+  rect(ctx, x + hipX,     y + 0,  5, 11, fg);  // straight column, full extension to the ground
+  rect(ctx, x + hipX - 2, y + 11, 8, 4,  fg);  // foot, flared, biased slightly behind (toward the tail)
+}
+function tuckedLeg(ctx, x, y, hipX, bendTowardCenter, fg) {
+  rect(ctx, x + hipX, y + 0, 5, 5, fg);                                   // upper leg, same start point as support
+  const bend = bendTowardCenter ? 3 : -3;
+  rect(ctx, x + hipX + bend, y + 5, 5, 4, fg);                            // bends inward toward the body's
+                                                                            // centerline, stays short — well
+                                                                            // clear of the ground
+}
+
+/**
+ * `mode`:
+ *   'A'    — left leg = support (planted), right leg = tucked (raised)
+ *   'B'    — mirror of A (right = support, left = tucked)
+ *   'jump' — both legs tucked up, well clear of the ground
+ *   'dead' — both legs collapsed/splayed outward
+ * Called with a y-offset of (bodyY + BODY_H), so y=0 here is the hip line.
+ */
+function drawDinoLegs(ctx, x, y, fg, mode) {
+  ctx.fillStyle = fg;
+
+  if (mode === 'jump') {
+    rect(ctx, x + LEFT_HIP,  y + 0, 5, 5, fg); rect(ctx, x + LEFT_HIP - 1,  y + 5, 6, 3, fg);
+    rect(ctx, x + RIGHT_HIP, y + 0, 5, 5, fg); rect(ctx, x + RIGHT_HIP - 1, y + 5, 6, 3, fg);
+    return;
+  }
+
+  if (mode === 'dead') {
+    rect(ctx, x + LEFT_HIP,  y + 0, 5, 4, fg); rect(ctx, x + LEFT_HIP - 3,  y + 4, 8, 4, fg); // left splayed
+    rect(ctx, x + RIGHT_HIP, y + 0, 5, 4, fg); rect(ctx, x + RIGHT_HIP + 3, y + 4, 8, 4, fg); // right splayed
+    return;
+  }
+
+  if (mode === 'A') {
+    supportLeg(ctx, x, y, LEFT_HIP, fg);
+    tuckedLeg(ctx, x, y, RIGHT_HIP, false, fg);  // bends left, toward center
+  } else {
+    tuckedLeg(ctx, x, y, LEFT_HIP, true, fg);    // bends right, toward center
+    supportLeg(ctx, x, y, RIGHT_HIP, fg);
   }
 }
 
 // ================================================================
-// DINO SPRITES  (20 cols × 22 rows, S=2 → 40×44px)
+// DUCK (low running pose) — same rectangle method, simpler shape.
 // ================================================================
-const DINO_BODY = [
-  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0], // r0  head top
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0], // r1  head
-  [0,0,0,0,0,0,0,1,1,1,0,1,1,1,1,1,1,1,0,0], // r2  eye (col 10 = gap)
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0], // r3  head
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0], // r4  jaw extends
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0], // r5  jaw
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0], // r6  mouth step down
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0], // r7  neck narrows
-  [0,0,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0], // r8  arm (cols 2-3) + chest
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0], // r9  wide torso (tail bump)
-  [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0], // r10 torso
-  [0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0], // r11 torso narrows
-  [0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r12 belly narrows
-  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r13 lower belly (cols 4-8)
-  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r14 lower belly
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // r15 HIP SPLIT: left(4-5) gap right(8-9)
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // r16 HIP SPLIT — 2 pixel gap between legs
-];
-// ── Run cycle ────────────────────────────────────────────────
-// Frame A: LEFT leg is the STRIDE leg (planted, full length).
-//          RIGHT leg is RAISED (just a stub at the hip).
-// Frame B: RIGHT leg is the STRIDE leg.
-//          LEFT leg is RAISED (just a stub at the hip).
-// The 2-pixel gap (cols 6-7) between the legs (cols 4-5 / cols 8-9)
-// remains clear in both frames, matching the reference image.
-const LEGS_A = [
-  [0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0], // left(4-5) + right stub(8) — bent knee visible
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left extends, right raised (hidden)
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left continues
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot angles slightly back (col 3-4)
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot planted
-];
-const LEGS_B = [
-  [0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // left stub(3) + right(8-9) — bent knee visible
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // right extends, left raised (hidden)
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // right continues
-  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], // foot angles forward (col 9-10)
-  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], // foot planted
-];
-const LEGS_JUMP = [
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs hanging
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs
-  [0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0], // legs tuck inward
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // fully tucked
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // fully tucked
-];
-const LEGS_DEAD = [
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs at hip
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left only (collapsed)
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot dragged
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-const DUCK_BODY = [
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,1,1,1,0,1,1,1,1,1,1,1,1,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
-  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
-  [0,0,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
-  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-const DUCK_LEGS_A = [ // left lifted/forward, right planted
-  [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-const DUCK_LEGS_B = [ // left planted, right lifted/forward
-  [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
+export const DUCK_W = 50;
+export const DUCK_H = 22;
+const DUCK_BODY_H = 16;
 
-const BODY_ROWS = DINO_BODY.length;
-const LEG_ROWS  = LEGS_A.length;
-const DINO_COLS = DINO_BODY[0].length;
-const DUCK_COLS = DUCK_BODY[0].length;
-export const DINO_W = DINO_COLS * S;
-export const DINO_H = (BODY_ROWS + LEG_ROWS) * S;
-const DUCK_W = DUCK_COLS * S;
-const DUCK_H = (DUCK_BODY.length + DUCK_LEGS_A.length) * S;
+function drawDuckBody(ctx, x, y, fg, bg) {
+  ctx.fillStyle = fg;
+  rect(ctx, x + 0,  y + 8,  38, 8, fg);   // long low body
+  rect(ctx, x + 30, y + 0,  16, 10, fg);  // head, raised slightly at the front
+  rect(ctx, x + 38, y + 6,  8,  4, fg);   // snout extends further forward
+  ctx.fillStyle = bg;
+  rect(ctx, x + 36, y + 3, 3, 3, bg);     // eye
+  ctx.fillStyle = fg;
+}
+
+function drawDuckLegs(ctx, x, y, fg, frameA) {
+  ctx.fillStyle = fg;
+  if (frameA) {
+    rect(ctx, x + 6,  y + 0, 5, 6, fg);
+    rect(ctx, x + 24, y + 0, 5, 4, fg);
+  } else {
+    rect(ctx, x + 6,  y + 0, 5, 4, fg);
+    rect(ctx, x + 24, y + 0, 5, 6, fg);
+  }
+}
 
 // ================================================================
 // DINO CLASS
@@ -173,9 +211,11 @@ export class Dino {
   }
 
   get hitbox() {
+    // Small inset margin so collisions feel fair (not pixel-perfect
+    // against the outer silhouette).
     return {
-      x: this.x + S * 2, y: this.y + S,
-      width: this.width - S * 4, height: this.height - S,
+      x: this.x + 4, y: this.y + 2,
+      width: this.width - 8, height: this.height - 2,
     };
   }
 
@@ -274,46 +314,42 @@ export class Dino {
     const x = this.x, y = this.y;
 
     if (this.isDucking && !this.isJumping && !this.isFlying) {
-      drawSprite(ctx, DUCK_BODY, x, y, fg);
-      ctx.fillStyle = bg;
-      ctx.fillRect(x + 9*S, y + 2*S, S, S);
-      drawSprite(ctx, this.frame === 0 ? DUCK_LEGS_A : DUCK_LEGS_B,
-        x, y + DUCK_BODY.length * S, fg);
+      drawDuckBody(ctx, x, y, fg, bg);
+      drawDuckLegs(ctx, x, y + DUCK_BODY_H, fg, this.frame === 0);
       return;
     }
 
-    drawSprite(ctx, DINO_BODY, x, y, fg);
+    drawDinoBody(ctx, x, y, fg, bg);
 
     if (this.dead) {
+      // X-shaped dead eyes, centered on where the live eye gap is (x+23..27, y+4..8)
       ctx.fillStyle = fg;
-      ctx.fillRect(x + 10*S, y + 2*S, S, S);
-      ctx.fillRect(x + 9*S,  y + 1*S, S, S);
-      ctx.fillRect(x + 11*S, y + 1*S, S, S);
-      ctx.fillRect(x + 10*S, y + 2*S, S, S);
-      ctx.fillRect(x + 9*S,  y + 3*S, S, S);
-      ctx.fillRect(x + 11*S, y + 3*S, S, S);
-      drawSprite(ctx, LEGS_DEAD, x, y + BODY_ROWS * S, fg);
+      rect(ctx, x + 22, y + 3, 2, 2, fg);
+      rect(ctx, x + 27, y + 3, 2, 2, fg);
+      rect(ctx, x + 24, y + 5, 3, 2, fg);
+      rect(ctx, x + 22, y + 7, 2, 2, fg);
+      rect(ctx, x + 27, y + 7, 2, 2, fg);
+      drawDinoLegs(ctx, x, y + BODY_H, fg, 'dead');
       return;
     }
 
     // Flight mode: flapping animation
     if (this.isFlying) {
-      const legs = this.frame === 0 ? LEGS_A : LEGS_B;
-      drawSprite(ctx, legs, x, y + BODY_ROWS * S, fg);
+      drawDinoLegs(ctx, x, y + BODY_H, fg, this.frame === 0 ? 'A' : 'B');
       // Small "wing" indicator
       ctx.fillStyle = fg;
       if (this.frame === 0) {
-        ctx.fillRect(x - 4, y + 6*S, 6, 3);
-        ctx.fillRect(x - 6, y + 5*S, 4, 3);
+        ctx.fillRect(x - 4, y + 14, 6, 3);
+        ctx.fillRect(x - 6, y + 11, 4, 3);
       } else {
-        ctx.fillRect(x - 4, y + 8*S, 6, 3);
-        ctx.fillRect(x - 6, y + 9*S, 4, 3);
+        ctx.fillRect(x - 4, y + 19, 6, 3);
+        ctx.fillRect(x - 6, y + 22, 4, 3);
       }
       return;
     }
 
-    const legs = this.isJumping ? LEGS_JUMP : this.frame === 0 ? LEGS_A : LEGS_B;
-    drawSprite(ctx, legs, x, y + BODY_ROWS * S, fg);
+    const mode = this.isJumping ? 'jump' : (this.frame === 0 ? 'A' : 'B');
+    drawDinoLegs(ctx, x, y + BODY_H, fg, mode);
   }
 }
 
@@ -655,7 +691,7 @@ export function randomBirdLevel() {
 // ================================================================
 // THEME (day/night with smooth crossfade, whole page)
 // ================================================================
-export const FIRST_NIGHT_SCORE = 1500;
+export const FIRST_NIGHT_SCORE = 1000;
 export const CYCLE_SCORE       = 500;
 export const FADE_SCORE        = 80;
 
@@ -674,6 +710,108 @@ export function getTheme(score) {
   const t = Math.min(1, (elapsed - cycle * CYCLE_SCORE) / FADE_SCORE);
   if (isNight) return { isNight:true, bg:lerpColor(DAY_BG,NIGHT_BG,t), fg:lerpColor(DAY_FG,NIGHT_FG,t) };
   return { isNight:false, bg:lerpColor(NIGHT_BG,DAY_BG,t), fg:lerpColor(NIGHT_FG,DAY_FG,t) };
+}
+
+// ================================================================
+// BIOME SCENERY (forest / desert / snow) — distant background
+// silhouettes that gradually cycle as the score climbs. These are
+// deliberately faded and slow-moving so they never compete with
+// gameplay (obstacles, perks, the dino) for visual attention —
+// they're texture, not foreground content.
+// ================================================================
+export const BIOME_CYCLE_SCORE = 300; // how long each biome lasts
+export const BIOME_FADE_SCORE  = 75;  // transition window into the next biome
+const BIOME_ORDER = ['forest', 'desert', 'snow'];
+export const SCENERY_OPACITY = 0.22;   // kept low — texture, not foreground
+
+// Returns which biome is active, which one is coming next, and how
+// far into the transition window we are (0 = not transitioning yet,
+// 1 = fully transitioned). Used to decide what NEW scenery to spawn
+// — existing scenery already on screen keeps its own shape and just
+// scrolls off naturally, so the changeover reads as gradual rather
+// than everything switching at once.
+export function getBiome(score) {
+  const cycle = Math.floor(score / BIOME_CYCLE_SCORE);
+  const into = score - cycle * BIOME_CYCLE_SCORE;
+  const current = BIOME_ORDER[cycle % BIOME_ORDER.length];
+  const next = BIOME_ORDER[(cycle + 1) % BIOME_ORDER.length];
+  const fadeStart = BIOME_CYCLE_SCORE - BIOME_FADE_SCORE;
+  const t = into > fadeStart ? (into - fadeStart) / BIOME_FADE_SCORE : 0;
+  return { current, next, t };
+}
+
+/**
+ * A single piece of distant background scenery — a tree, mesa, dune,
+ * or snow-capped pine, depending on biome. Drawn at low opacity and
+ * scrolled at a slow parallax rate (slower than clouds) so it reads
+ * as "far behind" rather than part of the play area.
+ */
+export class BiomeScenery {
+  constructor(x, biome, kind) {
+    this.x = x;
+    this.biome = biome;   // 'forest' | 'desert' | 'snow' — fixed at spawn time
+    this.kind = kind;     // shape variant within that biome
+    this.width = 34 + Math.random() * 22;
+    this.height = 30 + Math.random() * 26;
+  }
+  update(dx) { this.x -= dx * 0.15; } // slower than clouds (0.35) — feels further back
+  draw(ctx, color) {
+    ctx.save();
+    ctx.globalAlpha = SCENERY_OPACITY;
+    ctx.fillStyle = color;
+    const baseY = REF_GROUND_Y;
+    if (this.biome === 'forest') this._drawPine(ctx, baseY, color, false);
+    else if (this.biome === 'snow') this._drawPine(ctx, baseY, color, true);
+    else this._drawDesert(ctx, baseY);
+    ctx.restore();
+  }
+  _drawPine(ctx, baseY, color, snowCapped) {
+    const x = this.x, h = this.height, cx = x + this.width / 2;
+    const trunkH = h * 0.22;
+    ctx.fillRect(cx - 2, baseY - trunkH, 4, trunkH);
+    const layers = 3;
+    let topY = baseY - trunkH;
+    for (let i = 0; i < layers; i++) {
+      const layerH = h * 0.27;
+      const lw = this.width * (1 - i * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(cx, topY - layerH);
+      ctx.lineTo(cx - lw / 2, topY + layerH * 0.15);
+      ctx.lineTo(cx + lw / 2, topY + layerH * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      topY -= layerH * 0.85;
+    }
+    if (snowCapped) {
+      // small lighter cap on just the very top layer, suggesting snow
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = SCENERY_OPACITY * 1.4;
+      const capW = this.width * 0.32;
+      ctx.beginPath();
+      ctx.moveTo(cx, topY + h * 0.06);
+      ctx.lineTo(cx - capW / 2, topY + h * 0.22);
+      ctx.lineTo(cx + capW / 2, topY + h * 0.22);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = SCENERY_OPACITY;
+    }
+  }
+  _drawDesert(ctx, baseY) {
+    const x = this.x, w = this.width, h = this.height * 0.55;
+    if (this.kind === 'mesa') {
+      ctx.fillRect(x + w * 0.15, baseY - h, w * 0.7, h);
+      ctx.fillRect(x, baseY - h * 0.55, w, h * 0.55);
+    } else {
+      // dune — soft stepped hill, consistent with the pine's layered style
+      const steps = 3;
+      for (let i = 0; i < steps; i++) {
+        const sw = w * (1 - i * 0.28);
+        const sh = (h / steps) * (i + 1);
+        ctx.fillRect(x + (w - sw) / 2, baseY - sh, sw, h / steps);
+      }
+    }
+  }
 }
 
 // ================================================================

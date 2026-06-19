@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Dino, Cactus, Bird, Gap, Perk, Portal, Cloud, GroundDeco,
+  Dino, Cactus, Bird, Gap, Perk, Portal, Cloud, GroundDeco, BiomeScenery,
   REF_HEIGHT, REF_GROUND_Y, DINO_X,
   setGameWidth, getGameWidth, computeCamera,
   JUMP_HOLD_WINDOW,
   PERK_EFFECTS, PORTAL_DURATIONS,
   SPAWN_STATE, buildCluster, clusterInternalGap, breatherGap,
   shouldSpawnPerk, shouldSpawnSlowtime, shouldSpawnGravity, shouldSpawnFlight,
-  getTheme, rectsOverlap,
+  getTheme, getBiome, rectsOverlap,
 } from "./engine";
 
 // ================================================================
@@ -199,6 +199,8 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       obstacles: [],
       clouds: [],
       groundDecos: [],
+      scenery: [],
+      sceneryDist: 0,
       perks: [],
       speed: START_SPEED,
       score: 0,
@@ -245,6 +247,11 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
     for (let i = 0; i < 30; i++)
       stateRef.current.groundDecos.push(
         new GroundDeco(Math.random()*W, kinds[Math.floor(Math.random()*kinds.length)]));
+    // Seed initial background scenery for the starting biome (forest at score 0)
+    for (let i = 0; i < 6; i++) {
+      const kind = Math.random() < 0.5 ? 'mesa' : 'dune';
+      stateRef.current.scenery.push(new BiomeScenery(Math.random()*W, 'forest', kind));
+    }
   }, []);
 
   // ── Start / End ───────────────────────────────────────────
@@ -514,6 +521,22 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       s.groundDecos.push(new GroundDeco(
         gameW + Math.random()*30, kinds[Math.floor(Math.random()*kinds.length)]));
 
+    // ── Background biome scenery (forest/desert/snow, far behind) ──
+    for (const sc of s.scenery) sc.update(dx);
+    s.scenery = s.scenery.filter(sc => sc.x + sc.width > -20);
+    s.sceneryDist += dx;
+    if (s.sceneryDist >= 110 + Math.random() * 90) {
+      s.sceneryDist = 0;
+      const { current, next, t } = getBiome(fl);
+      // During a biome's transition window, gradually favor spawning
+      // the NEXT biome's scenery instead of the current one — existing
+      // pieces already on screen just scroll off naturally, so the
+      // changeover reads as gradual rather than an instant switch.
+      const biome = Math.random() < t ? next : current;
+      const kind = Math.random() < 0.5 ? 'mesa' : 'dune'; // only matters for desert; forest/snow ignore it
+      s.scenery.push(new BiomeScenery(gameW + Math.random()*40, biome, kind));
+    }
+
     // ── Collisions ──────────────────────────────────────────
     const db = s.dino.hitbox;
 
@@ -627,6 +650,10 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       ctx.translate(0, REF_HEIGHT);
       ctx.scale(1, -1);
     }
+
+    // Background scenery (forest/desert/snow) — drawn first, furthest
+    // back, faded, behind everything else including the clouds
+    for (const sc of s.scenery) sc.draw(ctx, fg);
 
     // Clouds
     for (const c of s.clouds) c.draw(ctx, fg);
