@@ -1,113 +1,101 @@
 // ============================================================
 // DINO ADVANCED — FULL GAME ENGINE
 // ============================================================
-// Reference coordinate system: all game logic uses REF_HEIGHT.
-// The canvas scales to fill the viewport during immersive play.
-// ============================================================
 
 export const REF_HEIGHT   = 300;
 export const REF_GROUND_Y = 250;
 export const DINO_X       = 80;
 
-// Dynamic game width (in reference coords), set each frame
 let _gameW = 900;
 export const setGameWidth = (w) => { _gameW = w; };
 export const getGameWidth = () => _gameW;
 
-// Camera: picks a scale based on the canvas's PIXEL WIDTH so the
-// visible field of view stays wide (roughly constant ref-units of
-// width visible regardless of device), instead of being driven by
-// canvas height — which is what caused the old "zoomed in" feel on
-// tall screens. Returns both the scale and how many ref-units of
-// width are now visible (always equal to the clamped target).
 export function computeCamera(canvasPxWidth) {
   const targetWidth = Math.max(900, Math.min(1500, canvasPxWidth * 1.15));
   const scale = canvasPxWidth / targetWidth;
   return { scale, gameW: targetWidth };
 }
 
-// ================================================================
-// PHYSICS
-// ================================================================
-const GRAVITY           = 0.0034;   // normal gravity — applies once not held, or after release
-const HOLD_GRAVITY       = GRAVITY * 0.32; // weakened gravity while actively held & ascending
-const LAUNCH_VEL         = -0.48;   // always-instant launch velocity, every press
-export const JUMP_HOLD_WINDOW = 1000; // ms cap on how long the hold-assist can extend a jump
+const GRAVITY           = 0.0034;
+const HOLD_GRAVITY      = GRAVITY * 0.32;
+const LAUNCH_VEL        = -0.48;
+export const JUMP_HOLD_WINDOW = 1000;
 const FLIGHT_GRAVITY    = 0.0012;
 const FLIGHT_FLAP_VEL   = -0.42;
 
-// ================================================================
-// SPRITE RENDERER
-// ================================================================
-const S = 2.4; // scale factor per sprite pixel
+const S = 2.4;
 
 function drawSprite(ctx, sprite, ox, oy, color) {
   ctx.fillStyle = color;
   for (let r = 0; r < sprite.length; r++) {
-    const row = sprite[r];
-    for (let c = 0; c < row.length; c++) {
-      if (row[c]) ctx.fillRect(ox + c * S, oy + r * S, S, S);
+    for (let c = 0; c < sprite[r].length; c++) {
+      if (sprite[r][c]) ctx.fillRect(ox + c * S, oy + r * S, S, S);
     }
   }
 }
 
 // ================================================================
-// DINO SPRITES  (20 cols × 22 rows, S=2 → 40×44px)
+// DINO SPRITES — improved character
 // ================================================================
-const DINO_BODY = [
-  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0], // r0  head top
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0], // r1  head
-  [0,0,0,0,0,0,0,1,1,1,0,1,1,1,1,1,1,1,0,0], // r2  eye (col 10 = gap)
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0], // r3  head
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0], // r4  jaw extends
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0], // r5  jaw
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0], // r6  mouth step down
-  [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0], // r7  neck narrows
-  [0,0,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0], // r8  arm (cols 2-3) + chest
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0], // r9  wide torso (tail bump)
-  [1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0], // r10 torso
-  [0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0], // r11 torso narrows
-  [0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r12 belly narrows
-  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r13 lower belly (cols 4-8)
-  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0], // r14 lower belly
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // r15 HIP SPLIT: left(4-5) gap right(8-9)
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // r16 HIP SPLIT — 2 pixel gap between legs
+const DINO_BODY_BASE = [
+  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0],
+  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,1,1,1,0,1,1,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,0,0,0],
+  [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0],
+  [0,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
 ];
-// ── Run cycle ────────────────────────────────────────────────
-// Frame A: LEFT leg is the STRIDE leg (planted, full length).
-//          RIGHT leg is RAISED (just a stub at the hip).
-// Frame B: RIGHT leg is the STRIDE leg.
-//          LEFT leg is RAISED (just a stub at the hip).
-// The 2-pixel gap (cols 6-7) between the legs (cols 4-5 / cols 8-9)
-// remains clear in both frames, matching the reference image.
+
+const DINO_BODY_A = DINO_BODY_BASE.map(r => [...r]);
+const DINO_BODY_B = DINO_BODY_BASE.map(r => [...r]);
+DINO_BODY_A[8] = [0,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0];
+DINO_BODY_B[8] = [0,0,0,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0];
+
+const DINO_BODY = DINO_BODY_BASE;
+
 const LEGS_A = [
-  [0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0], // left(4-5) + right stub(8) — bent knee visible
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left extends, right raised (hidden)
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left continues
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot angles slightly back (col 3-4)
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot planted
-];
-const LEGS_B = [
-  [0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // left stub(3) + right(8-9) — bent knee visible
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // right extends, left raised (hidden)
-  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // right continues
-  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], // foot angles forward (col 9-10)
-  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], // foot planted
-];
-const LEGS_JUMP = [
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs hanging
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs
-  [0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0], // legs tuck inward
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // fully tucked
-  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // fully tucked
-];
-const LEGS_DEAD = [
-  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0], // both legs at hip
-  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // left only (collapsed)
+  [0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // foot dragged
+  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
+
+const LEGS_B = [
+  [0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+];
+
+const LEGS_JUMP = [
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
+const LEGS_DEAD = [
+  [0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
 const DUCK_BODY = [
   [0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0],
   [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
@@ -120,11 +108,13 @@ const DUCK_BODY = [
   [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
-const DUCK_LEGS_A = [ // left lifted/forward, right planted
+
+const DUCK_LEGS_A = [
   [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
-const DUCK_LEGS_B = [ // left planted, right lifted/forward
+
+const DUCK_LEGS_B = [
   [0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
@@ -138,9 +128,6 @@ export const DINO_H = (BODY_ROWS + LEG_ROWS) * S;
 const DUCK_W = DUCK_COLS * S;
 const DUCK_H = (DUCK_BODY.length + DUCK_LEGS_A.length) * S;
 
-// ================================================================
-// DINO CLASS
-// ================================================================
 export class Dino {
   constructor() {
     this.x = DINO_X;
@@ -150,14 +137,17 @@ export class Dino {
     this.frame = 0;
     this.frameTimer = 0;
     this.dead = false;
-    // Jump: always launches instantly on press. Holding afterward
-    // keeps gravity weakened so the dino hangs/rises longer.
+
     this.holding = false;
     this.holdTime = 0;
-    // Flight mode
+
     this.isFlying = false;
-    // Gravity inversion
     this.inverted = false;
+
+    this.blinkTimer = 0;
+    this.blinking = false;
+    this.nextBlink = 1800 + Math.random() * 2400;
+
     this._stand();
   }
 
@@ -166,6 +156,7 @@ export class Dino {
     this.height = DINO_H;
     this.y = REF_GROUND_Y - this.height;
   }
+
   _duck() {
     this.width = DUCK_W;
     this.height = DUCK_H;
@@ -174,19 +165,20 @@ export class Dino {
 
   get hitbox() {
     return {
-      x: this.x + S * 2, y: this.y + S,
-      width: this.width - S * 4, height: this.height - S,
+      x: this.x + S * 2,
+      y: this.y + S,
+      width: this.width - S * 4,
+      height: this.height - S,
     };
   }
 
-  // Called on key/touch DOWN — always launches immediately, no delay.
   beginJump() {
     if (this.dead) return null;
     if (this.isFlying) {
       this.vy = FLIGHT_FLAP_VEL;
       return 'flap';
     }
-    if (this.isJumping) return null; // already airborne, ignore re-press
+    if (this.isJumping) return null;
     this.isJumping = true;
     this.isDucking = false;
     this._stand();
@@ -196,27 +188,31 @@ export class Dino {
     return 'jump';
   }
 
-  // Called on key/touch UP — stops extending the jump; normal gravity
-  // takes over from whatever height/velocity it's currently at.
   endHold() {
     this.holding = false;
   }
 
   setDuck(on) {
     if (this.dead || this.isFlying) return;
-    if (on && !this.isJumping) { this.isDucking = true; this._duck(); }
-    if (!on) { this.isDucking = false; if (!this.isJumping) this._stand(); }
+    if (on && !this.isJumping) {
+      this.isDucking = true;
+      this._duck();
+    }
+    if (!on) {
+      this.isDucking = false;
+      if (!this.isJumping) this._stand();
+    }
   }
 
-  // Flight mode
   enterFlight() {
     this.isFlying = true;
     this.isJumping = false;
     this.isDucking = false;
     this._stand();
-    this.y = REF_GROUND_Y - 120; // start in mid-air
+    this.y = REF_GROUND_Y - 120;
     this.vy = 0;
   }
+
   exitFlight() {
     this.isFlying = false;
     this.vy = 0;
@@ -224,38 +220,60 @@ export class Dino {
     this.y = REF_GROUND_Y - this.height;
   }
 
+  updateBlink(dt) {
+    if (this.dead) return;
+    this.blinkTimer += dt;
+
+    if (!this.blinking && this.blinkTimer >= this.nextBlink) {
+      this.blinking = true;
+      this.blinkTimer = 0;
+    }
+
+    if (this.blinking && this.blinkTimer >= 120) {
+      this.blinking = false;
+      this.blinkTimer = 0;
+      this.nextBlink = 1800 + Math.random() * 2600;
+    }
+  }
+
   update(dt) {
     if (this.dead) return null;
 
-    // Flight mode physics
+    this.updateBlink(dt);
+
     if (this.isFlying) {
       this.vy += FLIGHT_GRAVITY * dt;
       this.y += this.vy * dt;
-      if (this.y < 10) { this.y = 10; this.vy = 0; }
+      if (this.y < 10) {
+        this.y = 10;
+        this.vy = 0;
+      }
       if (this.y > REF_GROUND_Y - this.height) {
-        this.y = REF_GROUND_Y - this.height; this.vy = 0;
+        this.y = REF_GROUND_Y - this.height;
+        this.vy = 0;
       }
       this.frameTimer += dt;
-      if (this.frameTimer >= 80) { this.frameTimer = 0; this.frame ^= 1; }
+      if (this.frameTimer >= 80) {
+        this.frameTimer = 0;
+        this.frame ^= 1;
+      }
       return null;
     }
 
-    // Normal/inverted jump physics. Launch already happened instantly in
-    // beginJump(). While still held (and within the hold-assist window),
-    // gravity is weakened so the dino keeps rising/hangs longer — release
-    // (or hitting the window cap) restores full gravity immediately.
     if (this.isJumping) {
       if (this.holding) this.holdTime += dt;
       const assisted = this.holding && this.holdTime < JUMP_HOLD_WINDOW;
       const g = assisted ? HOLD_GRAVITY : GRAVITY;
       this.vy += g * dt;
       this.y += this.vy * dt;
+
       if (this.y >= REF_GROUND_Y - this.height) {
         this.y = REF_GROUND_Y - this.height;
         this.isJumping = false;
         this.vy = 0;
         this.holding = false;
-        if (this.isDucking) this._duck(); else this._stand();
+        if (this.isDucking) this._duck();
+        else this._stand();
       }
     } else {
       this.y = REF_GROUND_Y - this.height;
@@ -264,14 +282,29 @@ export class Dino {
     if (!this.isJumping) {
       const spd = this.isDucking ? 50 : 75;
       this.frameTimer += dt;
-      if (this.frameTimer >= spd) { this.frameTimer = 0; this.frame ^= 1; }
+      if (this.frameTimer >= spd) {
+        this.frameTimer = 0;
+        this.frame ^= 1;
+      }
     }
 
     return null;
   }
 
+  drawEye(ctx, x, y, fg, bg) {
+    if (this.dead) return;
+
+    if (this.blinking) {
+      ctx.fillStyle = fg;
+      ctx.fillRect(x + 10*S, y + 2*S, S, S);
+      ctx.fillStyle = bg;
+      ctx.fillRect(x + 9.5*S, y + 2.35*S, 2*S, S * 0.3);
+    }
+  }
+
   draw(ctx, fg, bg) {
-    const x = this.x, y = this.y;
+    const x = this.x;
+    const y = this.y;
 
     if (this.isDucking && !this.isJumping && !this.isFlying) {
       drawSprite(ctx, DUCK_BODY, x, y, fg);
@@ -282,25 +315,30 @@ export class Dino {
       return;
     }
 
-    drawSprite(ctx, DINO_BODY, x, y, fg);
+    const running = !this.isJumping && !this.isFlying && !this.dead;
+    const lean = running ? (this.frame === 0 ? 1.2 : 0) : 0;
+    const body = running
+      ? (this.frame === 0 ? DINO_BODY_A : DINO_BODY_B)
+      : DINO_BODY;
+
+    drawSprite(ctx, body, x + lean, y, fg);
+    this.drawEye(ctx, x + lean, y, fg, bg);
 
     if (this.dead) {
       ctx.fillStyle = fg;
-      ctx.fillRect(x + 10*S, y + 2*S, S, S);
-      ctx.fillRect(x + 9*S,  y + 1*S, S, S);
+      ctx.fillRect(x + 9*S, y + 1*S, S, S);
       ctx.fillRect(x + 11*S, y + 1*S, S, S);
       ctx.fillRect(x + 10*S, y + 2*S, S, S);
-      ctx.fillRect(x + 9*S,  y + 3*S, S, S);
+      ctx.fillRect(x + 9*S, y + 3*S, S, S);
       ctx.fillRect(x + 11*S, y + 3*S, S, S);
       drawSprite(ctx, LEGS_DEAD, x, y + BODY_ROWS * S, fg);
       return;
     }
 
-    // Flight mode: flapping animation
     if (this.isFlying) {
       const legs = this.frame === 0 ? LEGS_A : LEGS_B;
       drawSprite(ctx, legs, x, y + BODY_ROWS * S, fg);
-      // Small "wing" indicator
+
       ctx.fillStyle = fg;
       if (this.frame === 0) {
         ctx.fillRect(x - 4, y + 6*S, 6, 3);
@@ -329,12 +367,10 @@ function drawCactusUnit(ctx, cx, type, color) {
   const tw = type === 'small' ? 8 : 11;
   const armW = type === 'small' ? 6 : 8;
   const bx = cx + armW;
-  // trunk
+
   ctx.fillRect(bx, REF_GROUND_Y - h, tw, h);
-  // lower-left arm
   ctx.fillRect(cx, REF_GROUND_Y - h * 0.58, armW + 3, 4);
   ctx.fillRect(cx, REF_GROUND_Y - h * 0.80, armW, h * 0.26);
-  // upper-right arm
   ctx.fillRect(bx + tw - 3, REF_GROUND_Y - h * 0.42, armW + 3, 4);
   ctx.fillRect(bx + tw + armW - 3, REF_GROUND_Y - h * 0.62, armW, h * 0.26);
 }
@@ -349,13 +385,17 @@ export class Cactus {
     this.x = x;
     this.y = REF_GROUND_Y - this.height;
   }
+
   get hitbox() {
     return { x: this.x+4, y: this.y+4, width: this.width-8, height: this.height-4 };
   }
+
   update(dx) { this.x -= dx; }
+
   draw(ctx, color) {
-    for (let i = 0; i < this.count; i++)
+    for (let i = 0; i < this.count; i++) {
       drawCactusUnit(ctx, this.x + i * (CACTUS_W[this.type] + 4), this.type, color);
+    }
   }
 }
 
@@ -380,22 +420,30 @@ export class Bird {
     this.frame = 0;
     this.frameTimer = 0;
   }
+
   get hitbox() {
     return { x: this.x+10, y: this.y+6, width: this.width-20, height: 16 };
   }
+
   update(dx, dt) {
     this.x -= dx;
     this.frameTimer += dt;
-    if (this.frameTimer >= 120) { this.frameTimer = 0; this.frame ^= 1; }
+    if (this.frameTimer >= 120) {
+      this.frameTimer = 0;
+      this.frame ^= 1;
+    }
   }
+
   draw(ctx, color) {
     ctx.fillStyle = color;
     const x = this.x, y = this.y;
+
     ctx.fillRect(x+24, y+10, 32, 10);
     ctx.fillRect(x+50, y+4, 14, 10);
     ctx.fillRect(x+64, y+6, 12, 5);
     ctx.fillRect(x+12, y+12, 14, 6);
     ctx.fillRect(x+4, y+14, 10, 4);
+
     if (this.frame === 0) {
       ctx.fillRect(x+18, y, 44, 8);
       ctx.fillRect(x+26, y-5, 28, 5);
@@ -409,7 +457,7 @@ export class Bird {
 }
 
 // ================================================================
-// GAP (hole in ground — must jump over or die)
+// GAP
 // ================================================================
 export class Gap {
   constructor(x, width) {
@@ -419,56 +467,60 @@ export class Gap {
     this.height = 60;
     this.y = REF_GROUND_Y;
   }
+
   get hitbox() {
-    // Active zone: if dino is on the ground within this x range
     return { x: this.x + 8, y: REF_GROUND_Y - 5, width: this.width - 16, height: 40 };
   }
+
   update(dx) { this.x -= dx; }
+
   draw(ctx, fg) {
-    // Draw as a dark pit in the ground
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(this.x, REF_GROUND_Y + 4, this.width, 30);
-    // Jagged edges
     ctx.fillStyle = fg;
     ctx.fillRect(this.x - 2, REF_GROUND_Y + 2, 4, 10);
     ctx.fillRect(this.x + this.width - 2, REF_GROUND_Y + 2, 4, 10);
   }
-  // Gap kills dino only if dino is NOT jumping (on the ground)
+
   checkDinoFall(dino) {
     if (dino.isJumping || dino.isFlying || dino.dead) return false;
-    const dx = dino.x + dino.width / 2; // dino center x
+    const dx = dino.x + dino.width / 2;
     return dx > this.x + 8 && dx < this.x + this.width - 8;
   }
 }
 
 // ================================================================
-// PERK (green = helpful, red = risky)
+// PERK
 // ================================================================
 export class Perk {
   constructor(x, perkType) {
     this.x = x;
     this.kind = 'perk';
-    this.perkType = perkType; // 'green' | 'red'
+    this.perkType = perkType;
     this.width = 20;
     this.height = 20;
     this.y = REF_GROUND_Y - 60 - Math.random() * 40;
     this.collected = false;
     this.bobTimer = 0;
   }
+
   get hitbox() {
     return { x: this.x, y: this.y, width: this.width, height: this.height };
   }
+
   update(dx, dt) {
     this.x -= dx;
     this.bobTimer += dt;
   }
+
   draw(ctx) {
     if (this.collected) return;
+
     const bob = Math.sin(this.bobTimer * 0.005) * 4;
     const cx = this.x + 10, cy = this.y + 10 + bob;
     const color = this.perkType === 'green' ? '#22c55e' : '#ef4444';
+
     ctx.fillStyle = color;
-    // Diamond shape
     ctx.beginPath();
     ctx.moveTo(cx, cy - 10);
     ctx.lineTo(cx + 10, cy);
@@ -476,72 +528,77 @@ export class Perk {
     ctx.lineTo(cx - 10, cy);
     ctx.closePath();
     ctx.fill();
-    // Inner highlight
+
     ctx.fillStyle = this.perkType === 'green' ? '#4ade80' : '#f87171';
     ctx.fillRect(cx - 3, cy - 3, 6, 6);
   }
 }
 
-// Perk effect definitions
 export const PERK_EFFECTS = {
   green: { multiplier: 1.5, speedMod: 0.85, duration: 8000, label: 'BOOST' },
   red:   { multiplier: 2.5, speedMod: 1.35, duration: 6000, label: 'CHAOS' },
 };
 
 // ================================================================
-// PORTAL (gravity / flight / slow-time)
+// PORTAL
 // ================================================================
 export class Portal {
   constructor(x, portalType) {
     this.x = x;
     this.kind = 'portal';
-    this.portalType = portalType; // 'gravity' | 'flight' | 'slowtime'
+    this.portalType = portalType;
     this.width = 40;
     this.height = 60;
     this.y = REF_GROUND_Y - this.height - 10;
     this.activated = false;
     this.animTimer = 0;
   }
+
   get hitbox() {
     return { x: this.x, y: this.y, width: this.width, height: this.height };
   }
+
   update(dx, dt) {
     this.x -= dx;
     this.animTimer += dt;
   }
+
   draw(ctx) {
     if (this.activated) return;
+
     const cx = this.x + 20, cy = this.y + 30;
     const pulse = 0.8 + Math.sin(this.animTimer * 0.006) * 0.2;
     const r = 18 * pulse;
+
     const colors = {
-      gravity: '#a855f7',  // purple
-      flight:  '#3b82f6',  // blue
-      slowtime:'#06b6d4',  // cyan
+      gravity: '#a855f7',
+      flight:  '#3b82f6',
+      slowtime:'#06b6d4',
     };
+
     const color = colors[this.portalType] || '#fff';
-    // Outer ring
+
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
-    // Inner swirl
+
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, r * 0.5, this.animTimer * 0.003, this.animTimer * 0.003 + Math.PI * 1.5);
     ctx.stroke();
-    // Label
+
     ctx.fillStyle = color;
     ctx.font = '7px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
+
     const labels = { gravity: '↕', flight: '✈', slowtime: '◷' };
     ctx.fillText(labels[this.portalType] || '?', cx, cy + 4);
   }
 }
 
-// Portal durations
 export const PORTAL_DURATIONS = {
   gravity:  8000,
   flight:   6000,
@@ -552,8 +609,15 @@ export const PORTAL_DURATIONS = {
 // CLOUD
 // ================================================================
 export class Cloud {
-  constructor(x, y) { this.x = x; this.y = y; this.width = 74; this.height = 18; }
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.width = 74;
+    this.height = 18;
+  }
+
   update(dx) { this.x -= dx * 0.35; }
+
   draw(ctx, color) {
     ctx.fillStyle = color;
     ctx.fillRect(this.x+12, this.y, 50, 8);
@@ -567,28 +631,30 @@ export class Cloud {
 // GROUND DECO
 // ================================================================
 export class GroundDeco {
-  constructor(x, kind) { this.x = x; this.kind = kind; }
+  constructor(x, kind) {
+    this.x = x;
+    this.kind = kind;
+  }
+
   update(dx) { this.x -= dx; }
+
   draw(ctx, color) {
     ctx.fillStyle = color;
     if (this.kind === 'dot') ctx.fillRect(this.x, REF_GROUND_Y+5, 3, 2);
     else if (this.kind === 'dash') ctx.fillRect(this.x, REF_GROUND_Y+6, 8, 2);
-    else { ctx.fillRect(this.x, REF_GROUND_Y+4, 5, 3); ctx.fillRect(this.x+7, REF_GROUND_Y+5, 3, 2); }
+    else {
+      ctx.fillRect(this.x, REF_GROUND_Y+4, 5, 3);
+      ctx.fillRect(this.x+7, REF_GROUND_Y+5, 3, 2);
+    }
   }
 }
 
 // ================================================================
 // SPAWN / PATTERN SYSTEM
 // ================================================================
-// Instead of pure random, obstacles come in CLUSTERS then BREATHERS.
-// A cluster is 2-5 obstacles with tight internal spacing.
-// A breather is a longer gap where nothing spawns.
-
 export const SPAWN_STATE = { CLUSTER: 0, BREATHE: 1 };
 
 export function buildCluster(score, canvasWidth) {
-  // Decide cluster size based on score — kept modest so obstacles
-  // don't feel like a constant wall.
   const base = score < 300 ? 2 : score < 800 ? 2 : score < 1500 ? 3 : 3;
   const size = base + Math.floor(Math.random() * 2);
   const items = [];
@@ -606,6 +672,7 @@ export function buildCluster(score, canvasWidth) {
       items.push({ type: 'cactus', cactusType: g.type, count: g.count });
     }
   }
+
   return items;
 }
 
@@ -617,8 +684,7 @@ export function breatherGap(speed) {
   return Math.max(420, speed * 65 + Math.random() * 140);
 }
 
-// When to spawn special elements (deterministic score thresholds)
-export const PERK_INTERVAL     = 350;   // every N points, consider a perk
+export const PERK_INTERVAL     = 350;
 export const SLOWTIME_INTERVAL = 800;
 export const GRAVITY_INTERVAL  = 1200;
 export const FLIGHT_INTERVAL   = 1600;
@@ -626,12 +692,15 @@ export const FLIGHT_INTERVAL   = 1600;
 export function shouldSpawnPerk(score, lastPerkScore) {
   return score >= 400 && score - lastPerkScore >= PERK_INTERVAL;
 }
+
 export function shouldSpawnSlowtime(score, lastSlowScore) {
   return score >= 800 && score - lastSlowScore >= SLOWTIME_INTERVAL;
 }
+
 export function shouldSpawnGravity(score, lastGravScore) {
   return score >= 1200 && score - lastGravScore >= GRAVITY_INTERVAL;
 }
+
 export function shouldSpawnFlight(score, lastFlightScore) {
   return score >= 1600 && score - lastFlightScore >= FLIGHT_INTERVAL;
 }
@@ -653,26 +722,37 @@ export function randomBirdLevel() {
 }
 
 // ================================================================
-// THEME (day/night with smooth crossfade, whole page)
+// THEME
 // ================================================================
 export const FIRST_NIGHT_SCORE = 1500;
 export const CYCLE_SCORE       = 500;
 export const FADE_SCORE        = 80;
 
-function lerpCh(a, b, t) { return Math.round(a + (b - a) * t); }
+function lerpCh(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
 function lerpColor(ca, cb, t) {
   return `rgb(${lerpCh(ca[0],cb[0],t)},${lerpCh(ca[1],cb[1],t)},${lerpCh(ca[2],cb[2],t)})`;
 }
+
 const DAY_BG=[255,255,255], DAY_FG=[83,83,83];
 const NIGHT_BG=[26,26,26], NIGHT_FG=[235,235,235];
 
 export function getTheme(score) {
-  if (score < FIRST_NIGHT_SCORE) return { isNight:false, bg:`rgb(${DAY_BG})`, fg:`rgb(${DAY_FG})` };
+  if (score < FIRST_NIGHT_SCORE) {
+    return { isNight:false, bg:`rgb(${DAY_BG})`, fg:`rgb(${DAY_FG})` };
+  }
+
   const elapsed = score - FIRST_NIGHT_SCORE;
   const cycle = Math.floor(elapsed / CYCLE_SCORE);
   const isNight = cycle % 2 === 0;
   const t = Math.min(1, (elapsed - cycle * CYCLE_SCORE) / FADE_SCORE);
-  if (isNight) return { isNight:true, bg:lerpColor(DAY_BG,NIGHT_BG,t), fg:lerpColor(DAY_FG,NIGHT_FG,t) };
+
+  if (isNight) {
+    return { isNight:true, bg:lerpColor(DAY_BG,NIGHT_BG,t), fg:lerpColor(DAY_FG,NIGHT_FG,t) };
+  }
+
   return { isNight:false, bg:lerpColor(NIGHT_BG,DAY_BG,t), fg:lerpColor(NIGHT_FG,DAY_FG,t) };
 }
 
