@@ -3,7 +3,7 @@ export const SITE_CONFIG = {
   tokenName: "DINO",
   tokenTicker: "$DINO",
   // Contract address — replace with the real deployed mint address
-  contractAddress: "h5WMiFDZJUabRBBvyvf15681zkDC2t5QUFyUbC1pump",
+  contractAddress: "Loading",
   // Percentage of the pot taken by the team. The remaining 80% is what's
   // available for round winners. The team's cut is silently sent to a
   // second wallet by the backend (see server/server.js) and is never
