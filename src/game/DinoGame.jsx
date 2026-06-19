@@ -58,9 +58,24 @@ let musicStep = 0;
 let musicMuted = localStorage.getItem(MUSIC_MUTE_KEY) === "1";
 
 // A short 16-step bassline + melody, in Hz. 0 = rest.
-const MUSIC_BASS    = [110,0,110,0,131,0,110,0, 98,0,98,0,87,0,98,0];
-const MUSIC_MELODY  = [0,440,0,523,0,440,0,392, 0,392,0,349,0,392,0,330];
-const MUSIC_STEP_MS = 180;
+// ── 32-step pattern at 110ms/step = ~136 BPM ─────────────────
+// E Dorian: E(165/330/659) G(196/392/784) A(220/440) B(247/494)
+//           C#(554) D(294/587) F#(370/740)
+// Melody: strong descending hook E5→B4→G4, ascending answer, G5 climax
+const MUSIC_MELODY = [
+  659,  0,587,  0,   494,  0,392,  0,   // E5 D5 B4 G4  (descend)
+  440,  0,494,  0,   523,  0,587,  0,   // A4 B4 C5 D5  (ascend)
+  659,  0,659,  0,   784,  0,659,  0,   // E5 E5 G5! E5 (climax)
+  587,  0,523,  0,   494,  0,440,  0,   // D5 C5 B4 A4  (resolve)
+];
+// Bass: driving root-fifth movement
+const MUSIC_BASS = [
+  165,  0,165,  0,   196,  0,196,  0,   // E3 G3
+  220,  0,220,  0,   247,  0,247,  0,   // A3 B3
+  165,  0,165,  0,   165,  0,196,  0,   // E3 E3 G3
+  220,  0,196,  0,   165,  0,165,  0,   // A3 G3 E3
+];
+const MUSIC_STEP_MS = 110;
 
 function ensureMusicGain() {
   const a = ac();
@@ -218,6 +233,8 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       // Streak
       streak: 0,
       bestStreak: 0,
+      // Landing impact effect
+      landingEffect: 0,
     };
     lastMile.current = 0;
     // Seed clouds + ground decos
@@ -426,8 +443,15 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
       }
     }
 
-    // Dino
+    // Dino — detect landing for the impact effect
+    const wasJumping = s.dino.isJumping;
     s.dino.update(dt);
+    if (wasJumping && !s.dino.isJumping && !s.dino.dead) {
+      s.landingEffect = 1.0; // triggers the bump in draw()
+    }
+    if (s.landingEffect > 0) {
+      s.landingEffect = Math.max(0, s.landingEffect - dt / 160); // decays in ~160ms
+    }
 
     // ── Obstacle spawning (cluster/breathe pattern) ─────────
     s.spawnDist += dx;
@@ -591,6 +615,12 @@ export default function DinoGame({ onGameOver, onScoreUpdate, onImmersiveChange 
     const groundPixelY = ch * 0.83;
     ctx.translate(0, groundPixelY - REF_GROUND_Y * scale);
     ctx.scale(scale, scale);
+
+    // Landing impact: brief downward bump (world dips, snaps back)
+    // sin curve gives a smooth in-and-out feel over the decay window
+    if (s.landingEffect > 0) {
+      ctx.translate(0, Math.sin(s.landingEffect * Math.PI) * 5);
+    }
 
     // Gravity inversion: flip the entire game world
     if (eff.gravityInverted) {
